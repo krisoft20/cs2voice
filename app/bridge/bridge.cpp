@@ -550,7 +550,7 @@ namespace bridge {
             profiles::want(strings(json::at(j, "ids")), true);
         } else if (type == "set") {
             std::string key = json::str(json::at(j, "key")), value = json::str(json::at(j, "value"));
-            if (key == "lang" && (value == "system" || value == "en" || value == "pl")) {
+            if (key == "lang" && (value == "system" || value == "en" || value == "pl" || value == "de")) {
                 g_lang = value;
                 save_settings();
             } else if (key == "loader" && (value == "plant" || value == "radar" || value == "rounds" || value == "ammo")) {

@@ -189,7 +189,7 @@ namespace econ {
         }
         if (g_lang != lang) {
             std::vector<uint8_t> raw;
-            std::string file = lang == "pl" ? "polish" : "english";
+            std::string file = lang == "pl" ? "polish" : lang == "de" ? "german" : "english";
             if (!vpk::extract(pak, "resource/csgo_" + file + ".txt", raw, err))
                 return false;
             g_text.clear();

@@ -36,6 +36,8 @@ export const ChevronLeftIcon = tabler(["M15 6l-6 6l6 6"])
 
 export const ChevronRightIcon = tabler(["M9 6l6 6l-6 6"])
 
+export const ChevronDownIcon = tabler(["M6 9l6 6l6 -6"])
+
 export const PlusIcon = tabler(["M12 5l0 14", "M5 12l14 0"])
 
 export const MinusIcon = tabler(["M5 12l14 0"])

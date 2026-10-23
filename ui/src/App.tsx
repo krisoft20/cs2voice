@@ -2,7 +2,7 @@ import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } fr
 import type { ReactNode } from 'react'
 import { listen, send, type CleanupCfg, type Demo, type Folder, type Player, type Profile, type Roster, type Stats, type Storage, type PerfMsg, type SkinsMsg, type SkinItem } from './bridge'
 import { LANGS, resolve, translator, type Key, type LangChoice } from './i18n'
-import { BoltIcon, BombIcon, CalendarIcon, CheckIcon, ChevronLeftIcon, ChevronRightIcon, ClockIcon, CloseIcon, CloudIcon, CrownIcon, DemosIcon, DiskIcon, DoorIcon, FlameIcon, FolderIcon, FolderPlusIcon, HelpIcon, InfoIcon, LanguageIcon, LogoMark, MicIcon, MinusIcon, PaletteIcon, PlayIcon, PlusIcon, RefreshIcon, SettingsIcon, ShieldIcon, Speaker, SteamIcon, SunIcon, TargetIcon, TradeIcon, UsersIcon, WallIcon } from './icons'
+import { BoltIcon, BombIcon, CalendarIcon, CheckIcon, ChevronDownIcon, ChevronLeftIcon, ChevronRightIcon, ClockIcon, CloseIcon, CloudIcon, CrownIcon, DemosIcon, DiskIcon, DoorIcon, FlameIcon, FolderIcon, FolderPlusIcon, HelpIcon, InfoIcon, LanguageIcon, LogoMark, MicIcon, MinusIcon, PaletteIcon, PlayIcon, PlusIcon, RefreshIcon, SettingsIcon, ShieldIcon, Speaker, SteamIcon, SunIcon, TargetIcon, TradeIcon, UsersIcon, WallIcon } from './icons'
 import { Avatar, UiContext, useUi, type Loader } from './common'
 import { decode, draw } from './crosshair'
 import { Check, CleanupCard, CleanupReview, CleanupSettings } from './Cleanup'
@@ -191,7 +191,7 @@ export default function App() {
       else if (m.type === 'update') setUpdate({ version: m.version, notes: m.notes, size: m.size ?? 0 })
       else if (m.type === 'update_state') setUpdating({ state: m.state, done: m.done ?? 0, total: m.total ?? 0, err: m.err ?? '' })
       else if (m.type === 'settings') {
-        setChoice(m.lang === 'en' || m.lang === 'pl' ? m.lang : 'system')
+        setChoice(m.lang === 'en' || m.lang === 'pl' || m.lang === 'de' ? m.lang : 'system')
         setVersion(m.version)
         setUpdates(m.updates)
         if (m.close === 'ask' || m.close === 'tray' || m.close === 'quit') setCloseMode(m.close)
@@ -1140,13 +1140,7 @@ function Settings(props: {
               <h2>{t('language')}</h2>
               <p>{t('languageText')}</p>
             </div>
-            <div className="choices" role="radiogroup" aria-label={t('language')}>
-              {options.map(o => (
-                <button key={o.id} role="radio" aria-checked={choice === o.id} className={`choice${choice === o.id ? ' on' : ''}`} onClick={() => onLang(o.id)}>
-                  {o.name}
-                </button>
-              ))}
-            </div>
+            <LangPicker options={options} choice={choice} onPick={onLang} />
           </section>
           )}
           {cat === 'general' && (
@@ -1314,6 +1308,52 @@ const normTone = (key: Key, unit: string, v: number | null) => {
 
 const fmt = (v: number | null, digits: number, lang: string) =>
   v === null ? '–' : v.toLocaleString(lang, { minimumFractionDigits: digits, maximumFractionDigits: digits })
+
+function LangPicker(props: { options: { id: LangChoice; name: string }[]; choice: LangChoice; onPick: (c: LangChoice) => void }) {
+  const { t } = useUi()
+  const [open, setOpen] = useState(false)
+  const box = useRef<HTMLDivElement>(null)
+  useEffect(() => {
+    if (!open) return
+    const down = (e: MouseEvent) => !box.current?.contains(e.target as Node) && setOpen(false)
+    const key = (e: KeyboardEvent) => e.key === 'Escape' && setOpen(false)
+    window.addEventListener('mousedown', down)
+    window.addEventListener('keydown', key)
+    return () => {
+      window.removeEventListener('mousedown', down)
+      window.removeEventListener('keydown', key)
+    }
+  }, [open])
+  const nameOf = (c: LangChoice) => (c === 'system' ? `${t('systemLanguage')} (${LANGS.find(l => l.id === resolve('system'))?.name})` : (LANGS.find(l => l.id === c)?.name ?? c))
+  return (
+    <div className="lang-pick" ref={box}>
+      <button className={`lang-current${open ? ' open' : ''}`} onClick={() => setOpen(o => !o)} aria-haspopup="listbox" aria-expanded={open} aria-label={t('language')}>
+        <span>{nameOf(props.choice)}</span>
+        <ChevronDownIcon />
+      </button>
+      {open && (
+        <ul className="lang-menu" role="listbox" aria-label={t('language')}>
+          {props.options.map(o => (
+            <li key={o.id}>
+              <button
+                role="option"
+                aria-selected={props.choice === o.id}
+                className={props.choice === o.id ? 'on' : ''}
+                onClick={() => {
+                  props.onPick(o.id)
+                  setOpen(false)
+                }}
+              >
+                <span>{nameOf(o.id)}</span>
+                {props.choice === o.id && <CheckIcon />}
+              </button>
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
+  )
+}
 
 function LoadMark(props: { kind: Loader }) {
   switch (props.kind) {
