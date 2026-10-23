@@ -1,0 +1,13 @@
+build/
+out/
+.vs/
+*.user
+*.log
+*.dem
+*.dem.zst
+*.dem.gz
+ui/node_modules/
+ui/dist/
+ui/public/dev-voice.bin
+dist/
+*.tsbuildinfo
