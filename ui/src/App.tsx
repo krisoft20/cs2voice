@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import type { ReactNode } from 'react'
 import { listen, send, type CleanupCfg, type Demo, type Folder, type Player, type Profile, type Roster, type Stats, type Storage, type PerfMsg, type SkinsMsg, type SkinItem } from './bridge'
-import { LANGS, resolve, translator, type Key, type LangChoice } from './i18n'
+import { LANGS, gameLang, resolve, translator, type Key, type Lang, type LangChoice } from './i18n'
 import { BoltIcon, BombIcon, CalendarIcon, CheckIcon, ChevronDownIcon, ChevronLeftIcon, ChevronRightIcon, ClockIcon, CloseIcon, CloudIcon, CrownIcon, DemosIcon, DiskIcon, DoorIcon, FlameIcon, FolderIcon, FolderPlusIcon, HelpIcon, InfoIcon, LanguageIcon, LogoMark, MicIcon, MinusIcon, PaletteIcon, PlayIcon, PlusIcon, RefreshIcon, SettingsIcon, ShieldIcon, Speaker, SteamIcon, SunIcon, TargetIcon, TradeIcon, UsersIcon, WallIcon } from './icons'
 import { Avatar, UiContext, useUi, type Loader } from './common'
 import { decode, draw } from './crosshair'
@@ -191,7 +191,7 @@ export default function App() {
       else if (m.type === 'update') setUpdate({ version: m.version, notes: m.notes, size: m.size ?? 0 })
       else if (m.type === 'update_state') setUpdating({ state: m.state, done: m.done ?? 0, total: m.total ?? 0, err: m.err ?? '' })
       else if (m.type === 'settings') {
-        setChoice(m.lang === 'en' || m.lang === 'pl' || m.lang === 'de' ? m.lang : 'system')
+        setChoice(LANGS.some(l => l.id === m.lang) ? (m.lang as Lang) : 'system')
         setVersion(m.version)
         setUpdates(m.updates)
         if (m.close === 'ask' || m.close === 'tray' || m.close === 'quit') setCloseMode(m.close)
@@ -686,7 +686,7 @@ function DemoView(props: {
     if (tab === 'details' && !icons) send({ type: 'icons' })
   }, [tab, icons])
   useEffect(() => {
-    if (tab === 'skins' && roster) send({ type: 'skins', path: demo.path, lang })
+    if (tab === 'skins' && roster) send({ type: 'skins', path: demo.path, lang: gameLang(lang) })
   }, [tab, demo.path, !!roster, roster?.partial, roster?.stale, lang])
   const copyDemo = () => {
     if (!roster) return
@@ -1119,7 +1119,7 @@ function Settings(props: {
     { id: 'about', name: 'about', icon: InfoIcon },
   ]
   useEffect(() => send({ type: 'storage' }), [])
-  const options: { id: LangChoice; name: string }[] = [{ id: 'system', name: t('systemLanguage') }, ...LANGS]
+  const options: { id: LangChoice; name: string }[] = [{ id: 'system', name: t('systemLanguage') }, ...LANGS.map(l => ({ id: l.id, name: l.name }))]
   return (
     <main className="settings">
       <h1>{t('settings')}</h1>

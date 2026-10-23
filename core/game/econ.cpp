@@ -1,5 +1,6 @@
 #include "pch.h"
 
+#include "dbg.h"
 #include "game/econ.h"
 #include "game/vpk.h"
 #include "text.h"
@@ -189,9 +190,13 @@ namespace econ {
         }
         if (g_lang != lang) {
             std::vector<uint8_t> raw;
-            std::string file = lang == "pl" ? "polish" : lang == "de" ? "german" : "english";
-            if (!vpk::extract(pak, "resource/csgo_" + file + ".txt", raw, err))
-                return false;
+            bool plain = !lang.empty() && lang.size() <= 16 && lang.find_first_not_of("abcdefghijklmnopqrstuvwxyz") == std::string::npos;
+            std::string file = plain ? lang : "english";
+            if (!vpk::extract(pak, "resource/csgo_" + file + ".txt", raw, err)) {
+                dbg::print("[econ] no csgo_%s.txt, using english", file.c_str());
+                if (file == "english" || !vpk::extract(pak, "resource/csgo_english.txt", raw, err))
+                    return false;
+            }
             g_text.clear();
             size_t skip = raw.size() >= 3 && raw[0] == 0xef && raw[1] == 0xbb && raw[2] == 0xbf ? 3 : 0;
             parse((const char*)raw.data() + skip, (const char*)raw.data() + raw.size(), on_text);

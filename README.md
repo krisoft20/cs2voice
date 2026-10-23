@@ -95,7 +95,7 @@ The demo parser, the zstd decoder (`core/parser/demo/zstdx.cpp`) and the readers
 
 ## Contributing
 
-Issues and pull requests are welcome. For bugs, attach `%LOCALAPPDATA%\cs2voice\cs2voice.log`. New translations go in `ui/src/i18n.ts`.
+Issues and pull requests are welcome. For bugs, attach `%LOCALAPPDATA%\cs2voice\cs2voice.log`. New translations go in `ui/src/lang/`, one file per language.
 
 ## License
 
