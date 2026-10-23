@@ -20,6 +20,7 @@
 #include "demos/finder.h"
 #include "json/json.h"
 #include "platform/files.h"
+#include "platform/setup.h"
 #include "platform/window.h"
 #include "text.h"
 #include "web/web.h"
@@ -141,7 +142,11 @@ namespace bridge {
         std::string skip;
         for (const std::string& k : g_skip)
             skip += (skip.empty() ? "\"" : ",\"") + json::escape(k) + "\"";
-        web::post("{\"type\":\"settings\",\"version\":\"" CS2VOICE_VERSION "\",\"lang\":\"" + json::escape(g_lang) + "\",\"loader\":\"" +
+        setup_t st = setup::state();
+        std::string inst = std::string("{\"installed\":") + (st.installed ? "true" : "false") + ",\"here\":" + (st.here ? "true" : "false") +
+                           ",\"desktop\":" + (st.desktop ? "true" : "false") + ",\"autostart\":" + (st.autostart ? "true" : "false") + ",\"dir\":\"" +
+                           json::escape(text::utf8(st.dir)) + "\"}";
+        web::post("{\"type\":\"settings\",\"version\":\"" CS2VOICE_VERSION "\",\"setup\":" + inst + ",\"lang\":\"" + json::escape(g_lang) + "\",\"loader\":\"" +
                   json::escape(g_loader) + "\",\"updates\":" + (g_updates ? "true" : "false") + ",\"close\":\"" + json::escape(g_close) + "\",\"cleanup\":{\"mode\":\"" + json::escape(g_cleanup) + "\",\"method\":\"" + json::escape(g_cleanup_method) +
                   "\",\"days\":" + std::to_string(g_cleanup_days) + ",\"copies\":" + (g_cleanup_copies ? "true" : "false") +
                   ",\"broken\":" + (g_cleanup_broken ? "true" : "false") + ",\"mute\":" + (g_cleanup_mute ? "true" : "false") +
@@ -493,6 +498,7 @@ namespace bridge {
         window::set_close(g_close);
         load_opened();
         update::tidy();
+        setup::refresh();
         finder::default_folders(g_defaults);
         for (const std::string& f : g_defaults)
             dbg::print("[bridge] folder %s", f.c_str());
@@ -573,6 +579,15 @@ namespace bridge {
             } else if (key == "close" && (value == "ask" || value == "tray" || value == "quit")) {
                 g_close = value;
                 window::set_close(value);
+            } else if (key == "autostart" || key == "desktop") {
+                if (!setup::state().installed)
+                    return;
+                if (key == "autostart")
+                    setup::set_autostart(value == "1");
+                else
+                    setup::set_desktop(value == "1");
+                send_settings();
+                return;
             } else if (key == "updates") {
                 g_updates = value == "1";
                 if (g_updates)
@@ -610,6 +625,24 @@ namespace bridge {
             delete_demos(known_paths(json::at(j, "paths")), method != "delete");
         } else if (type == "open_url") {
             open_url(json::str(json::at(j, "url")));
+        } else if (type == "install") {
+            std::string why;
+            const json_t* desk = json::at(j, "desktop");
+            const json_t* boot = json::at(j, "autostart");
+            if (!setup::install(desk && desk->b, why)) {
+                web::post("{\"type\":\"setup_error\",\"err\":\"" + json::escape(why) + "\"}");
+                return;
+            }
+            setup::set_autostart(boot && boot->b);
+            if (!setup::state().here && setup::start_installed()) {
+                window::command("quit");
+            } else {
+                send_settings();
+            }
+        } else if (type == "uninstall") {
+            const json_t* wipe = json::at(j, "data");
+            setup::uninstall(wipe && wipe->b, g_data);
+            window::command("quit");
         } else if (type == "tray_text") {
             window::set_menu(text::wide(json::str(json::at(j, "open"))), text::wide(json::str(json::at(j, "quit"))));
         } else if (type == "win") {

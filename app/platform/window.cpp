@@ -18,6 +18,7 @@ namespace window {
     std::string g_close = "ask";
     bool g_asking = false;
     bool g_tray = false;
+    bool g_start_tray = false;
     UINT g_taskbar = 0;
     std::wstring g_open_text = L"Open cs2voice";
     std::wstring g_quit_text = L"Quit";
@@ -202,7 +203,7 @@ namespace window {
         DwmSetWindowAttribute(g_hwnd, DWMWA_USE_IMMERSIVE_DARK_MODE, &dark, sizeof(dark));
         COLORREF caption = BACKGROUND;
         DwmSetWindowAttribute(g_hwnd, DWMWA_CAPTION_COLOR, &caption, sizeof(caption));
-        ShowWindow(g_hwnd, hidden ? SW_SHOWNOACTIVATE : SW_SHOW);
+        ShowWindow(g_hwnd, hidden ? SW_SHOWNOACTIVATE : g_start_tray ? SW_HIDE : SW_SHOW);
         UpdateWindow(g_hwnd);
         if (!hidden)
             tray_add();
@@ -250,6 +251,10 @@ namespace window {
             g_asking = false;
         if (action == "tray" || action == "quit")
             g_asking = false;
+    }
+
+    void start_in_tray() {
+        g_start_tray = true;
     }
 
     void set_close(const std::string& mode) {

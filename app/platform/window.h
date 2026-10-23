@@ -22,6 +22,7 @@ namespace window {
     void post_rescan();
     void command(const std::string& action);
     void set_close(const std::string& mode);
+    void start_in_tray();
     void set_menu(const std::wstring& open, const std::wstring& quit);
     bool pump();
 }

@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import type { ReactNode } from 'react'
-import { listen, send, type CleanupCfg, type Demo, type Folder, type Player, type Profile, type Roster, type Stats, type Storage, type PerfMsg, type SkinsMsg, type SkinItem } from './bridge'
+import { listen, send, type CleanupCfg, type SetupInfo, type Demo, type Folder, type Player, type Profile, type Roster, type Stats, type Storage, type PerfMsg, type SkinsMsg, type SkinItem } from './bridge'
 import { LANGS, gameLang, resolve, translator, type Key, type Lang, type LangChoice } from './i18n'
 import { BoltIcon, BombIcon, CalendarIcon, CheckIcon, ChevronDownIcon, ChevronLeftIcon, ChevronRightIcon, ClockIcon, CloseIcon, CloudIcon, CrownIcon, DemosIcon, DiskIcon, DoorIcon, FlameIcon, FolderIcon, FolderPlusIcon, HelpIcon, InfoIcon, LanguageIcon, LogoMark, MicIcon, MinusIcon, PaletteIcon, PlayIcon, PlusIcon, RefreshIcon, SettingsIcon, ShieldIcon, Speaker, SteamIcon, SunIcon, TargetIcon, TradeIcon, UsersIcon, WallIcon } from './icons'
 import { Avatar, UiContext, useUi, type Loader } from './common'
@@ -49,6 +49,8 @@ export default function App() {
   const [showUpdate, setShowUpdate] = useState(false)
   const [closeMode, setCloseMode] = useState<CloseMode>('ask')
   const [asking, setAsking] = useState(false)
+  const [setupInfo, setSetupInfo] = useState<SetupInfo | null>(null)
+  const [setupErr, setSetupErr] = useState('')
   const [loader, setLoader] = useState<Loader>('radar')
   const [spinning, setSpinning] = useState(false)
   const [voice, setVoice] = useState<{ path: string; data?: ArrayBuffer; err: string } | null>(null)
@@ -188,6 +190,7 @@ export default function App() {
         if (m.state === 'copied') setTimeout(() => setWatch(w => (w?.state === m.state ? null : w)), 2500)
       }
       else if (m.type === 'close_ask') setAsking(true)
+      else if (m.type === 'setup_error') setSetupErr(m.err)
       else if (m.type === 'update') setUpdate({ version: m.version, notes: m.notes, size: m.size ?? 0 })
       else if (m.type === 'update_state') setUpdating({ state: m.state, done: m.done ?? 0, total: m.total ?? 0, err: m.err ?? '' })
       else if (m.type === 'settings') {
@@ -195,6 +198,7 @@ export default function App() {
         setVersion(m.version)
         setUpdates(m.updates)
         if (m.close === 'ask' || m.close === 'tray' || m.close === 'quit') setCloseMode(m.close)
+        if (m.setup) setSetupInfo(m.setup)
         if (m.loader === 'plant' || m.loader === 'radar' || m.loader === 'rounds' || m.loader === 'ammo') setLoader(m.loader)
         if (m.cleanup) setCleanup(m.cleanup)
       }
@@ -366,6 +370,12 @@ export default function App() {
             onLoader={l => {
               setLoader(l)
               send({ type: 'set', key: 'loader', value: l })
+            }}
+            setup={setupInfo}
+            setupErr={setupErr}
+            onInstall={(desktop, autostart) => {
+              setSetupErr('')
+              send({ type: 'install', desktop, autostart })
             }}
             closeMode={closeMode}
             onCloseMode={c => {
@@ -1096,9 +1106,12 @@ function Settings(props: {
   onLoader: (l: Loader) => void
   closeMode: CloseMode
   onCloseMode: (c: CloseMode) => void
+  setup: SetupInfo | null
+  setupErr: string
+  onInstall: (desktop: boolean, autostart: boolean) => void
 }) {
   const { t, lang } = useUi()
-  const { version, updates, onUpdates, cleanup, plan, onReview, choice, onLang, folders, storage, loader, onLoader, closeMode, onCloseMode } = props
+  const { version, updates, onUpdates, cleanup, plan, onReview, choice, onLang, folders, storage, loader, onLoader, closeMode, onCloseMode, setup, setupErr, onInstall } = props
   const closeModes: { id: CloseMode; name: Key }[] = [
     { id: 'ask', name: 'closeAskMode' },
     { id: 'tray', name: 'closeTray' },
@@ -1159,6 +1172,7 @@ function Settings(props: {
             </div>
           </section>
           )}
+          {cat === 'general' && setup && <InstallSetting setup={setup} err={setupErr} onInstall={onInstall} />}
           {cat === 'general' && (
           <section className="setting">
             <div className="setting-head">
@@ -1308,6 +1322,76 @@ const normTone = (key: Key, unit: string, v: number | null) => {
 
 const fmt = (v: number | null, digits: number, lang: string) =>
   v === null ? '–' : v.toLocaleString(lang, { minimumFractionDigits: digits, maximumFractionDigits: digits })
+
+function InstallSetting(props: { setup: SetupInfo; err: string; onInstall: (desktop: boolean, autostart: boolean) => void }) {
+  const { t } = useUi()
+  const { setup } = props
+  const [desktop, setDesktop] = useState(true)
+  const [autostart, setAutostart] = useState(false)
+  const [confirm, setConfirm] = useState(false)
+  const set = (key: string, on: boolean) => send({ type: 'set', key, value: on ? '1' : '0' })
+  return (
+    <section className="setting">
+      <div className="setting-head">
+        <h2>{t('installTitle')}</h2>
+        <p>{setup.installed ? t('installedIn', { dir: setup.dir }) : t('installText')}</p>
+      </div>
+      <div className="install-box">
+        {setup.installed ? (
+          <>
+            {!setup.here && <p className="install-note">{t('installElsewhere')}</p>}
+            <Check on={setup.autostart} onChange={on => set('autostart', on)} label={t('installAutostart')} note={t('installAutostartNote')} />
+            <Check on={setup.desktop} onChange={on => set('desktop', on)} label={t('installDesktop')} />
+            <div className="row">
+              <button className="ghost danger" onClick={() => setConfirm(true)}>
+                {t('uninstall')}
+              </button>
+            </div>
+          </>
+        ) : (
+          <>
+            <Check on={desktop} onChange={setDesktop} label={t('installDesktop')} />
+            <Check on={autostart} onChange={setAutostart} label={t('installAutostart')} note={t('installAutostartNote')} />
+            <div className="row">
+              <button className="install-go" onClick={() => props.onInstall(desktop, autostart)}>
+                {t('installGo')}
+              </button>
+            </div>
+          </>
+        )}
+        {props.err && <p className="install-err">{t('installFailed', { err: props.err })}</p>}
+      </div>
+      {confirm && <UninstallAsk onClose={() => setConfirm(false)} />}
+    </section>
+  )
+}
+
+function UninstallAsk(props: { onClose: () => void }) {
+  const { t } = useUi()
+  const [data, setData] = useState(false)
+  useEffect(() => {
+    const key = (e: KeyboardEvent) => e.key === 'Escape' && props.onClose()
+    window.addEventListener('keydown', key)
+    return () => window.removeEventListener('keydown', key)
+  })
+  return (
+    <div className="modal" onMouseDown={props.onClose}>
+      <div className="dialog close-dialog" onMouseDown={e => e.stopPropagation()} role="dialog" aria-label={t('uninstallTitle')}>
+        <h2>{t('uninstallTitle')}</h2>
+        <p>{t('uninstallText')}</p>
+        <Check on={data} onChange={setData} label={t('uninstallData')} />
+        <div className="dialog-buttons">
+          <button onClick={props.onClose} autoFocus>
+            {t('cancel')}
+          </button>
+          <button className="danger" onClick={() => send({ type: 'uninstall', data })}>
+            {t('uninstall')}
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
 
 function LangPicker(props: { options: { id: LangChoice; name: string }[]; choice: LangChoice; onPick: (c: LangChoice) => void }) {
   const { t } = useUi()

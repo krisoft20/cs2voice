@@ -99,6 +99,8 @@ export type RoundInfo = {
 
 export type Demo = { path: string; name: string; folder: string; size: number; mtime: number; opened?: number; keep?: boolean; info?: Roster }
 
+export type SetupInfo = { installed: boolean; here: boolean; desktop: boolean; autostart: boolean; dir: string }
+
 export type CleanupCfg = {
   mode: 'off' | 'ask' | 'auto'
   method: 'recycle' | 'delete'
@@ -123,8 +125,9 @@ export type Incoming =
   | { type: 'profiles'; items: Record<string, Profile> }
   | { type: 'me'; steamid: string }
   | { type: 'art'; map: string }
-  | { type: 'settings'; version: string; lang: string; loader?: string; updates: boolean; close?: string; cleanup?: CleanupCfg }
+  | { type: 'settings'; version: string; lang: string; loader?: string; updates: boolean; close?: string; setup?: SetupInfo; cleanup?: CleanupCfg }
   | { type: 'close_ask' }
+  | { type: 'setup_error'; err: string }
   | { type: 'update'; version: string; notes: string; size: number }
   | { type: 'update_state'; state: 'downloading' | 'failed'; done?: number; total?: number; err?: string }
   | { type: 'voice'; path: string; err: string; data?: ArrayBuffer }
@@ -168,6 +171,8 @@ type Outgoing =
   | { type: 'clear_cache' }
   | { type: 'win'; action: 'minimize' | 'maximize' | 'close' | 'tray' | 'quit' | 'stay' }
   | { type: 'tray_text'; open: string; quit: string }
+  | { type: 'install'; desktop: boolean; autostart: boolean }
+  | { type: 'uninstall'; data: boolean }
   | { type: 'open_url'; url: string }
   | { type: 'delete_demos'; paths: string[] }
   | { type: 'move_demos'; paths: string[] }

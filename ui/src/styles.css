@@ -5546,3 +5546,37 @@ button:focus-visible {
     transition: none;
   }
 }
+
+.install-box {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.install-box .row {
+  margin-top: 10px;
+}
+
+.install-note {
+  margin: 0 0 6px;
+  color: var(--muted);
+  font-size: 14px;
+}
+
+.install-go {
+  padding: 8px 18px;
+  border-radius: 6px;
+  background: var(--text);
+  color: var(--bg);
+  font-weight: 500;
+}
+
+.install-err {
+  margin: 8px 0 0;
+  color: var(--bad);
+  font-size: 14px;
+}
+
+.ghost.danger {
+  color: var(--bad);
+}
