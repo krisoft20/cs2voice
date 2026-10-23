@@ -1,0 +1,3 @@
+Name = krisoft.cs2voice
+Publisher = CN=C3C91108-181C-475E-AD2F-0F3AAC3FCEED
+PublisherName = krisoft

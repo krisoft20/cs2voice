@@ -13,7 +13,7 @@ export const masks = (slots: Iterable<number>) => {
 
 export const command = (slots: Iterable<number>) => {
   const { low, high } = masks(slots)
-  return `tv_listen_voice_indices ${low}; tv_listen_voice_indices_h ${high}`
+  return high ? `tv_listen_voice_indices ${low}; tv_listen_voice_indices_h ${high}` : `tv_listen_voice_indices ${low}`
 }
 
 export const source = (server: string, t: T) => {

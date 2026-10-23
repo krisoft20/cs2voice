@@ -1,5 +1,6 @@
 #include "pch.h"
 
+#include <appmodel.h>
 #include <shlobj.h>
 #include <shobjidl.h>
 
@@ -40,6 +41,11 @@ namespace setup {
         wchar_t buf[MAX_PATH];
         DWORD n = GetModuleFileNameW(nullptr, buf, MAX_PATH);
         return std::wstring(buf, n);
+    }
+
+    bool packaged() {
+        UINT32 n = 0;
+        return GetCurrentPackageFullName(&n, nullptr) != APPMODEL_ERROR_NO_PACKAGE;
     }
 
     bool exists(const std::wstring& path) {

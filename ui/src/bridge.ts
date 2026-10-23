@@ -99,7 +99,7 @@ export type RoundInfo = {
 
 export type Demo = { path: string; name: string; folder: string; size: number; mtime: number; opened?: number; keep?: boolean; info?: Roster }
 
-export type SetupInfo = { installed: boolean; here: boolean; desktop: boolean; autostart: boolean; dir: string }
+export type SetupInfo = { store: boolean; installed: boolean; here: boolean; desktop: boolean; autostart: boolean; dir: string }
 
 export type CleanupCfg = {
   mode: 'off' | 'ask' | 'auto'
@@ -125,7 +125,7 @@ export type Incoming =
   | { type: 'profiles'; items: Record<string, Profile> }
   | { type: 'me'; steamid: string }
   | { type: 'art'; map: string }
-  | { type: 'settings'; version: string; lang: string; loader?: string; updates: boolean; close?: string; setup?: SetupInfo; cleanup?: CleanupCfg }
+  | { type: 'settings'; version: string; lang: string; loader?: string; updates: boolean; close?: string; steam?: boolean; setup?: SetupInfo; cleanup?: CleanupCfg }
   | { type: 'close_ask' }
   | { type: 'setup_error'; err: string }
   | { type: 'update'; version: string; notes: string; size: number }

@@ -35,6 +35,7 @@ namespace profiles {
     std::wstring g_cache_path;
     std::wstring g_dir;
     HINTERNET g_session = nullptr;
+    std::atomic<bool> g_online = true;
     bool g_dirty = false;
 
     int64_t now() {
@@ -353,6 +354,11 @@ namespace profiles {
         }
     }
 
+    void set_online(bool on) {
+        g_online = on;
+        dbg::print("[profiles] steam %s", on ? "on" : "off");
+    }
+
     void want(const std::vector<std::string>& ids, bool urgent) {
         std::map<std::string, entry_t> known;
         {
@@ -364,7 +370,7 @@ namespace profiles {
                 bool fresh = it != g_cache.end() && now() - it->second.fetched < (urgent ? RECHECK : MAX_AGE);
                 if (it != g_cache.end())
                     known[id] = it->second;
-                if ((fresh && (it->second.file || it->second.url.empty())) || !g_session)
+                if ((fresh && (it->second.file || it->second.url.empty())) || !g_session || !g_online)
                     continue;
                 auto q = std::find(g_queue.begin(), g_queue.end(), id);
                 if (q != g_queue.end()) {

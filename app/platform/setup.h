@@ -10,6 +10,7 @@ struct setup_t {
 
 namespace setup {
     std::wstring exe_path();
+    bool packaged();
     setup_t state();
     bool install(bool desktop, std::string& err);
     bool start_installed();

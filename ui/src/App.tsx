@@ -39,6 +39,7 @@ export default function App() {
   const [choice, setChoice] = useState<LangChoice>('system')
   const [version, setVersion] = useState('')
   const [updates, setUpdates] = useState(true)
+  const [steam, setSteam] = useState(true)
   const [update, setUpdate] = useState<{ version: string; notes: string; size: number } | null>(null)
   const [updating, setUpdating] = useState<{ state: 'idle' | 'downloading' | 'failed'; done: number; total: number; err: string }>({
     state: 'idle',
@@ -197,6 +198,7 @@ export default function App() {
         setChoice(LANGS.some(l => l.id === m.lang) ? (m.lang as Lang) : 'system')
         setVersion(m.version)
         setUpdates(m.updates)
+        if (m.steam !== undefined) setSteam(m.steam)
         if (m.close === 'ask' || m.close === 'tray' || m.close === 'quit') setCloseMode(m.close)
         if (m.setup) setSetupInfo(m.setup)
         if (m.loader === 'plant' || m.loader === 'radar' || m.loader === 'rounds' || m.loader === 'ammo') setLoader(m.loader)
@@ -354,6 +356,11 @@ export default function App() {
           <Settings
             cat={settingsCat}
             version={version}
+            steam={steam}
+            onSteam={on => {
+              setSteam(on)
+              send({ type: 'set', key: 'steam', value: on ? '1' : '0' })
+            }}
             updates={updates}
             onUpdates={on => {
               setUpdates(on)
@@ -1095,6 +1102,8 @@ function Settings(props: {
   version: string
   updates: boolean
   onUpdates: (on: boolean) => void
+  steam: boolean
+  onSteam: (on: boolean) => void
   cleanup: CleanupCfg
   plan: ReturnType<typeof planCleanup>
   onReview: () => void
@@ -1111,7 +1120,7 @@ function Settings(props: {
   onInstall: (desktop: boolean, autostart: boolean) => void
 }) {
   const { t, lang } = useUi()
-  const { version, updates, onUpdates, cleanup, plan, onReview, choice, onLang, folders, storage, loader, onLoader, closeMode, onCloseMode, setup, setupErr, onInstall } = props
+  const { version, updates, onUpdates, steam, onSteam, cleanup, plan, onReview, choice, onLang, folders, storage, loader, onLoader, closeMode, onCloseMode, setup, setupErr, onInstall } = props
   const closeModes: { id: CloseMode; name: Key }[] = [
     { id: 'ask', name: 'closeAskMode' },
     { id: 'tray', name: 'closeTray' },
@@ -1156,7 +1165,7 @@ function Settings(props: {
             <LangPicker options={options} choice={choice} onPick={onLang} />
           </section>
           )}
-          {cat === 'general' && (
+          {cat === 'general' && !setup?.store && (
           <section className="setting">
             <div className="setting-head">
               <h2>{t('updates')}</h2>
@@ -1172,7 +1181,23 @@ function Settings(props: {
             </div>
           </section>
           )}
-          {cat === 'general' && setup && <InstallSetting setup={setup} err={setupErr} onInstall={onInstall} />}
+          {cat === 'general' && (
+          <section className="setting">
+            <div className="setting-head">
+              <h2>{t('steamSetting')}</h2>
+              <p>{t('steamSettingText')}</p>
+            </div>
+            <div className="choices" role="radiogroup" aria-label={t('steamSetting')}>
+              <button role="radio" aria-checked={steam} className={`choice${steam ? ' on' : ''}`} onClick={() => onSteam(true)}>
+                {t('steamOn')}
+              </button>
+              <button role="radio" aria-checked={!steam} className={`choice${!steam ? ' on' : ''}`} onClick={() => onSteam(false)}>
+                {t('steamOff')}
+              </button>
+            </div>
+          </section>
+          )}
+          {cat === 'general' && setup && !setup.store && <InstallSetting setup={setup} err={setupErr} onInstall={onInstall} />}
           {cat === 'general' && (
           <section className="setting">
             <div className="setting-head">

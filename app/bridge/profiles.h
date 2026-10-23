@@ -6,4 +6,5 @@ namespace profiles {
     void clear();
     void keep(const std::vector<std::string>& ids);
     void want(const std::vector<std::string>& ids, bool urgent);
+    void set_online(bool on);
 }

@@ -4,6 +4,7 @@
 #include "dbg.h"
 #include "json/json.h"
 #include "platform/net.h"
+#include "platform/setup.h"
 #include "platform/window.h"
 #include "text.h"
 
@@ -94,6 +95,10 @@ namespace update {
     }
 
     void check() {
+        if (setup::packaged()) {
+            dbg::print("[update] store package, the store updates it");
+            return;
+        }
         if (g_check.joinable())
             return;
         g_check = std::thread(run_check);

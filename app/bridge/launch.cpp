@@ -133,7 +133,9 @@ namespace launch {
             dbg::print("[launch] unpacked %s in %llu ms", j.file.name.c_str(), (unsigned long long)(GetTickCount64() - t0));
         }
         std::replace(path.begin(), path.end(), '\\', '/');
-        std::string voice = "tv_listen_voice_indices " + std::to_string((int32_t)j.low) + "; tv_listen_voice_indices_h " + std::to_string((int32_t)j.high);
+        std::string voice = "tv_listen_voice_indices " + std::to_string((int32_t)j.low);
+        if (j.high)
+            voice += "; tv_listen_voice_indices_h " + std::to_string((int32_t)j.high);
         std::string line = voice + "; playdemo \"" + path + "\"";
         files::clip(nullptr, line);
         post("copied", "");

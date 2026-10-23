@@ -46,6 +46,7 @@ namespace bridge {
     int64_t g_snooze = 0;
     bool g_updates = true;
     std::string g_close = "ask";
+    bool g_steam = true;
 
     std::vector<std::string> all_folders() {
         std::vector<std::string> out = g_defaults;
@@ -91,6 +92,8 @@ namespace bridge {
                 g_updates = s.substr(8) == "1";
             else if (s.rfind("close=", 0) == 0)
                 g_close = s.substr(6);
+            else if (s.rfind("steam=", 0) == 0)
+                g_steam = s.substr(6) == "1";
         }
         fclose(f);
     }
@@ -127,6 +130,7 @@ namespace bridge {
         fprintf(f, "loader=%s\n", g_loader.c_str());
         fprintf(f, "updates=%d\n", g_updates ? 1 : 0);
         fprintf(f, "close=%s\n", g_close.c_str());
+        fprintf(f, "steam=%d\n", g_steam ? 1 : 0);
         for (const std::string& c : g_custom)
             fprintf(f, "folder=%s\n", c.c_str());
         fprintf(f, "cleanup=%s\ncleanup_method=%s\ncleanup_days=%d\ncleanup_copies=%d\ncleanup_broken=%d\ncleanup_mute=%d\nsnooze=%lld\n", g_cleanup.c_str(),
@@ -144,10 +148,10 @@ namespace bridge {
             skip += (skip.empty() ? "\"" : ",\"") + json::escape(k) + "\"";
         setup_t st = setup::state();
         std::string inst = std::string("{\"installed\":") + (st.installed ? "true" : "false") + ",\"here\":" + (st.here ? "true" : "false") +
-                           ",\"desktop\":" + (st.desktop ? "true" : "false") + ",\"autostart\":" + (st.autostart ? "true" : "false") + ",\"dir\":\"" +
+                           ",\"store\":" + (setup::packaged() ? "true" : "false") + ",\"desktop\":" + (st.desktop ? "true" : "false") + ",\"autostart\":" + (st.autostart ? "true" : "false") + ",\"dir\":\"" +
                            json::escape(text::utf8(st.dir)) + "\"}";
         web::post("{\"type\":\"settings\",\"version\":\"" CS2VOICE_VERSION "\",\"setup\":" + inst + ",\"lang\":\"" + json::escape(g_lang) + "\",\"loader\":\"" +
-                  json::escape(g_loader) + "\",\"updates\":" + (g_updates ? "true" : "false") + ",\"close\":\"" + json::escape(g_close) + "\",\"cleanup\":{\"mode\":\"" + json::escape(g_cleanup) + "\",\"method\":\"" + json::escape(g_cleanup_method) +
+                  json::escape(g_loader) + "\",\"updates\":" + (g_updates ? "true" : "false") + ",\"close\":\"" + json::escape(g_close) + "\",\"steam\":" + (g_steam ? "true" : "false") + ",\"cleanup\":{\"mode\":\"" + json::escape(g_cleanup) + "\",\"method\":\"" + json::escape(g_cleanup_method) +
                   "\",\"days\":" + std::to_string(g_cleanup_days) + ",\"copies\":" + (g_cleanup_copies ? "true" : "false") +
                   ",\"broken\":" + (g_cleanup_broken ? "true" : "false") + ",\"mute\":" + (g_cleanup_mute ? "true" : "false") +
                   ",\"snooze\":" + std::to_string(g_snooze) + ",\"skip\":[" + skip + "]}}");
@@ -503,6 +507,7 @@ namespace bridge {
         for (const std::string& f : g_defaults)
             dbg::print("[bridge] folder %s", f.c_str());
         profiles::init(data_dir + L"\\profiles.txt", data_dir + L"\\avatars");
+        profiles::set_online(g_steam);
         if (!jobs::init(data_dir + L"\\cache.txt"))
             return false;
         maps::init(data_dir + L"\\maps");
@@ -579,6 +584,9 @@ namespace bridge {
             } else if (key == "close" && (value == "ask" || value == "tray" || value == "quit")) {
                 g_close = value;
                 window::set_close(value);
+            } else if (key == "steam") {
+                g_steam = value == "1";
+                profiles::set_online(g_steam);
             } else if (key == "autostart" || key == "desktop") {
                 if (!setup::state().installed)
                     return;
@@ -595,7 +603,7 @@ namespace bridge {
             } else {
                 return;
             }
-            if (key.rfind("cleanup", 0) == 0 || key == "snooze" || key == "updates" || key == "close") {
+            if (key.rfind("cleanup", 0) == 0 || key == "snooze" || key == "updates" || key == "close" || key == "steam") {
                 save_settings();
                 send_settings();
             }
