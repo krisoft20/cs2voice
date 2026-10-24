@@ -488,14 +488,18 @@ namespace bridge {
         ShellExecuteW(window::handle(), L"open", text::wide(url).c_str(), nullptr, nullptr, SW_SHOWNORMAL);
     }
 
-    void fix_demo(const std::string& path) {
+    std::string fixed_path(const std::string& path) {
         std::string out = path;
         for (const char* ext : {".dem.zst", ".dem"})
             if (out.size() > strlen(ext) && out.compare(out.size() - strlen(ext), strlen(ext), ext) == 0) {
                 out.resize(out.size() - strlen(ext));
                 break;
             }
-        out += "-fixed.dem";
+        return out + "-fixed.dem";
+    }
+
+    void fix_demo(const std::string& path) {
+        std::string out = fixed_path(path);
         std::thread([path, out] {
             std::string err;
             bool ok = basefix::fix(path, out, err);
@@ -688,7 +692,11 @@ namespace bridge {
             rescan();
             send_storage();
         } else if (type == "watch") {
-            if (const demo_file_t* f = file_of(json::str(json::at(j, "path"))))
+            std::string path = json::str(json::at(j, "path"));
+            const demo_file_t* f = file_of(fixed_path(path));
+            if (!f)
+                f = file_of(path);
+            if (f)
                 launch::watch(*f, (uint32_t)(int64_t)json::num(json::at(j, "low")), (uint32_t)(int64_t)json::num(json::at(j, "high")));
         } else if (type == "save_clip") {
             save_clip(json::str(json::at(j, "name")), json::str(json::at(j, "data")));

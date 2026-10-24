@@ -145,7 +145,8 @@ export default function App() {
           for (const d of m.items) if (d.info) next[d.path] = d.info
           return next
         })
-        setSelected(s => s ?? m.items[0]?.path ?? null)
+        const want = new URLSearchParams(location.hash.slice(1)).get('demo')
+        setSelected(s => s ?? (want && m.items.find(d => d.path.includes(want))?.path) ?? m.items[0]?.path ?? null)
       } else if (m.type === 'folders') setFolders(m.items)
       else if (m.type === 'roster') {
         setRosters(r => ({ ...r, [m.path]: m }))
@@ -730,7 +731,9 @@ function DemoView(props: {
   const { t, lang, me } = useUi()
   const { demo, roster, chosen, setChosen, copied, avatars, profiles, art, pool, voice, track, radar, perf, skins, econ, icons, saved, watch, onWatch, fix, onFix } = props
   const [seenVoices, setSeenVoices] = useState(false)
-  const [tab, setTab] = useState<'overview' | 'players' | 'details' | 'voices' | 'radar' | 'crosshairs' | 'skins'>('overview')
+  const [tab, setTab] = useState<'overview' | 'players' | 'details' | 'voices' | 'radar' | 'crosshairs' | 'skins'>(
+    () => (new URLSearchParams(location.hash.slice(1)).get('tab') as 'players' | null) ?? 'overview',
+  )
   const [focus, setFocus] = useState<number | null>(null)
   const tabsRef = useRef<HTMLElement>(null)
   const [bar, setBar] = useState<{ x: number; w: number } | null>(null)
