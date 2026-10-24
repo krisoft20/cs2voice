@@ -1,5 +1,12 @@
 #include "pch.h"
 
+#include <shellapi.h>
+#include <shobjidl.h>
+#include <unknwn.h>
+#include <winrt/Windows.Foundation.Collections.h>
+#include <winrt/Windows.Foundation.h>
+#include <winrt/Windows.Services.Store.h>
+
 #include "bridge/update.h"
 #include "dbg.h"
 #include "json/json.h"
@@ -94,14 +101,54 @@ namespace update {
                           "\",\"size\":" + std::to_string((uint64_t)size) + "}");
     }
 
-    void check() {
-        if (setup::packaged()) {
-            dbg::print("[update] store package, the store updates it");
+    void run_store_check() {
+        try {
+            winrt::init_apartment(winrt::apartment_type::multi_threaded);
+            auto ctx = winrt::Windows::Services::Store::StoreContext::GetDefault();
+            auto updates = ctx.GetAppAndOptionalStorePackageUpdatesAsync().get();
+            if (updates.Size() == 0) {
+                dbg::print("[update] store has nothing newer");
+                return;
+            }
+        } catch (const winrt::hresult_error& e) {
+            dbg::print("[update] store check failed: %s", text::utf8(e.message().c_str()).c_str());
             return;
         }
+        std::string body, tag, notes, err;
+        json_t r;
+        if (net::get(LATEST, body, API_HEADERS) && json::parse(body, r, err)) {
+            tag = json::str(json::at(r, "tag_name"));
+            notes = json::str(json::at(r, "body"));
+        }
+        {
+            std::lock_guard<std::mutex> lock(g_mu);
+            g_version = tag.empty() ? "store" : tag;
+        }
+        dbg::print("[update] store has an update (%s)", tag.c_str());
+        window::post_json("{\"type\":\"update\",\"version\":\"" + json::escape(tag) + "\",\"notes\":\"" + json::escape(notes) + "\",\"size\":0,\"store\":true}");
+    }
+
+    void run_store_install() {
+        try {
+            winrt::init_apartment(winrt::apartment_type::multi_threaded);
+            auto ctx = winrt::Windows::Services::Store::StoreContext::GetDefault();
+            ctx.as<::IInitializeWithWindow>()->Initialize(window::handle());
+            auto updates = ctx.GetAppAndOptionalStorePackageUpdatesAsync().get();
+            if (updates.Size() > 0) {
+                auto result = ctx.RequestDownloadAndInstallStorePackageUpdatesAsync(updates).get();
+                dbg::print("[update] store install finished with state %d", (int)result.OverallState());
+                return;
+            }
+        } catch (const winrt::hresult_error& e) {
+            dbg::print("[update] store install failed: %s", text::utf8(e.message().c_str()).c_str());
+        }
+        ShellExecuteW(window::handle(), L"open", L"ms-windows-store://pdp/?productid=9PDV2HRCK9WS", nullptr, nullptr, SW_SHOWNORMAL);
+    }
+
+    void check() {
         if (g_check.joinable())
             return;
-        g_check = std::thread(run_check);
+        g_check = std::thread(setup::packaged() ? run_store_check : run_check);
     }
 
     void on_progress(uint64_t done, uint64_t total, void*) {
@@ -168,16 +215,20 @@ namespace update {
     }
 
     void install() {
+        bool store = setup::packaged();
         {
             std::lock_guard<std::mutex> lock(g_mu);
-            if (g_busy || g_url.empty())
+            if (g_busy || (!store && g_url.empty()))
                 return;
             g_busy = true;
         }
         if (g_install.joinable())
             g_install.join();
-        g_install = std::thread([] {
-            run_install();
+        g_install = std::thread([store] {
+            if (store)
+                run_store_install();
+            else
+                run_install();
             std::lock_guard<std::mutex> lock(g_mu);
             g_busy = false;
         });

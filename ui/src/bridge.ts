@@ -142,7 +142,7 @@ export type Incoming =
   | { type: 'settings'; version: string; lang: string; loader?: string; updates: boolean; close?: string; steam?: boolean; setup?: SetupInfo; cleanup?: CleanupCfg }
   | { type: 'close_ask' }
   | { type: 'setup_error'; err: string }
-  | { type: 'update'; version: string; notes: string; size: number }
+  | { type: 'update'; version: string; notes: string; size: number; store?: boolean }
   | { type: 'update_state'; state: 'downloading' | 'failed'; done?: number; total?: number; err?: string }
   | { type: 'voice'; path: string; err: string; data?: ArrayBuffer }
   | { type: 'track'; path: string; err: string; data?: ArrayBuffer }

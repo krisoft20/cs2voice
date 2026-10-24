@@ -40,7 +40,7 @@ export default function App() {
   const [version, setVersion] = useState('')
   const [updates, setUpdates] = useState(true)
   const [steam, setSteam] = useState(true)
-  const [update, setUpdate] = useState<{ version: string; notes: string; size: number } | null>(null)
+  const [update, setUpdate] = useState<{ version: string; notes: string; size: number; store: boolean } | null>(null)
   const [updating, setUpdating] = useState<{ state: 'idle' | 'downloading' | 'failed'; done: number; total: number; err: string }>({
     state: 'idle',
     done: 0,
@@ -198,7 +198,7 @@ export default function App() {
       }
       else if (m.type === 'close_ask') setAsking(true)
       else if (m.type === 'setup_error') setSetupErr(m.err)
-      else if (m.type === 'update') setUpdate({ version: m.version, notes: m.notes, size: m.size ?? 0 })
+      else if (m.type === 'update') setUpdate({ version: m.version, notes: m.notes, size: m.size ?? 0, store: !!m.store })
       else if (m.type === 'update_state') setUpdating({ state: m.state, done: m.done ?? 0, total: m.total ?? 0, err: m.err ?? '' })
       else if (m.type === 'settings') {
         setChoice(LANGS.some(l => l.id === m.lang) ? (m.lang as Lang) : 'system')
@@ -441,7 +441,7 @@ export default function App() {
           }}
         />
       )}
-      {showUpdate && update && <Update version={update.version} current={version} notes={update.notes} size={update.size} state={updating} onClose={() => setShowUpdate(false)} />}
+      {showUpdate && update && <Update version={update.version} current={version} notes={update.notes} size={update.size} store={update.store} state={updating} onClose={() => setShowUpdate(false)} />}
       {review && plan.length > 0 && <CleanupReview plan={plan} cfg={cleanup} onClose={closeReview} />}
     </UiContext.Provider>
   )
@@ -463,11 +463,12 @@ function Update(props: {
   current: string
   notes: string
   size: number
+  store: boolean
   state: { state: 'idle' | 'downloading' | 'failed'; done: number; total: number; err: string }
   onClose: () => void
 }) {
   const { t, lang } = useUi()
-  const { version, current, notes, size, state, onClose } = props
+  const { version, current, notes, size, store, state, onClose } = props
   const busy = state.state === 'downloading'
   const lines = notes
     .split('\n')
@@ -490,7 +491,7 @@ function Update(props: {
           </button>
         </div>
         <div className="wn-body">
-          <h2>{t('updateTitle', { v: version.replace(/^v/, '') })}</h2>
+          <h2>{version ? t('updateTitle', { v: version.replace(/^v/, '') }) : t('updateTitleStore')}</h2>
           <div className="wn-notes">
             <ul>
               {lines.map((l, i) => (
@@ -503,7 +504,7 @@ function Update(props: {
           ) : busy ? (
             <p>{t('updateProgress', { done: mb(state.done), total: mb(state.total) })}</p>
           ) : (
-            <p>{t('updateHave', { v: current, size: mb(size) })}</p>
+            <p>{store ? t('updateHaveStore', { v: current }) : t('updateHave', { v: current, size: mb(size) })}</p>
           )}
           {busy && (
             <div className="wn-bar">

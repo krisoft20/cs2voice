@@ -306,6 +306,8 @@ export const en = {
   updateInstall: 'Install and restart',
   whatsNew: "What's new",
   updateHave: 'You have {v}. Download size {size}.',
+  updateHaveStore: 'You have {v}. The update installs through the Microsoft Store.',
+  updateTitleStore: 'New cs2voice version',
   updateProgress: 'Downloading {done} of {total}',
   updateFailed: 'Update failed: {err}',
   cleanup: 'Cleanup',

@@ -308,6 +308,8 @@ export const pl: Dict = {
   updateInstall: 'Zainstaluj i uruchom ponownie',
   whatsNew: 'Co nowego',
   updateHave: 'Masz {v}. Do pobrania {size}.',
+  updateHaveStore: 'Masz {v}. Aktualizacja zainstaluje się przez Microsoft Store.',
+  updateTitleStore: 'Nowa wersja cs2voice',
   updateProgress: 'Pobieranie {done} z {total}',
   updateFailed: 'Aktualizacja nie wyszła: {err}',
   cleanup: 'Sprzątanie',
