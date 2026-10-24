@@ -83,6 +83,25 @@ namespace basefix {
         varint(out, v);
     }
 
+    const char* MUTES[][2] = {
+        {"m_uiCommunicationMuteFlags", "m_uiCommunicationMuteFlagX"},
+        {"m_bHasCommunicationAbuseMute", "m_bHasCommunicationAbuseMutX"},
+    };
+
+    bool rename_mutes(const uint8_t* data, size_t n, std::vector<uint8_t>& out) {
+        out.assign(data, data + n);
+        int hits = 0;
+        for (auto& m : MUTES) {
+            size_t len = strlen(m[0]);
+            for (size_t i = 0; i + len <= out.size(); i++)
+                if (memcmp(out.data() + i, m[0], len) == 0) {
+                    memcpy(out.data() + i, m[1], len);
+                    hits++;
+                }
+        }
+        return hits > 0;
+    }
+
     const string_table_t* baselines(const parser_t& p) {
         int t = string_tables::find(p.tables, "instancebaseline");
         return t < 0 ? nullptr : &p.tables.list[t];
@@ -474,6 +493,9 @@ namespace basefix {
                 changed = add_to_packet(s->add, f.data, f.len, body, ok);
             else if (f.cmd == dem_string_tables)
                 changed = add_to_snapshot(s->add, f.data, f.len, body, ok);
+            bool placed = changed;
+            if (f.cmd == dem_send_tables)
+                changed = rename_mutes(f.data, f.len, body);
             uint64_t now = written;
             if (changed) {
                 std::vector<uint8_t> frame;
@@ -483,7 +505,7 @@ namespace basefix {
                 frame.insert(frame.end(), body.begin(), body.end());
                 fwrite(frame.data(), 1, frame.size(), out);
                 written += frame.size();
-                changed_frames++;
+                changed_frames += placed;
             } else {
                 fwrite(d->data + start, 1, end - start, out);
                 written += end - start;
@@ -514,5 +536,55 @@ namespace basefix {
         dbg::print("[basefix] %s: %zu late baselines moved into %d signon frames", in.c_str(), s->add.size(), changed_frames);
         delete s;
         return true;
+    }
+
+    bool unmute(const uint8_t* dem, size_t len, FILE* out) {
+        const size_t HEAD = 16;
+        if (len < HEAD)
+            return false;
+        const uint8_t* p = dem + HEAD;
+        const uint8_t* end = dem + len;
+        while (p < end) {
+            const uint8_t* start = p;
+            uint64_t cmd, tick, size;
+            if (!proto::varint(p, end, cmd) || !proto::varint(p, end, tick) || !proto::varint(p, end, size) || size > (uint64_t)(end - p))
+                return false;
+            const uint8_t* data = p;
+            p += size;
+            int type = (int)(cmd & ~64ull);
+            if (type == dem_stop)
+                return false;
+            if (type != dem_send_tables)
+                continue;
+            std::vector<uint8_t> plain, body;
+            size_t n = (size_t)size;
+            if (cmd & 64) {
+                if (!snappy::decompress(data, (size_t)size, plain, n))
+                    return false;
+                data = plain.data();
+            }
+            if (!rename_mutes(data, n, body))
+                return false;
+            std::vector<uint8_t> frame;
+            varint(frame, (uint64_t)type);
+            varint(frame, tick);
+            varint(frame, body.size());
+            frame.insert(frame.end(), body.begin(), body.end());
+            size_t from = start - dem, to = p - dem;
+            int64_t delta = (int64_t)frame.size() - (int64_t)(to - from);
+            uint8_t head[HEAD];
+            memcpy(head, dem, HEAD);
+            for (int slot = 0; slot < 2; slot++) {
+                uint32_t off;
+                memcpy(&off, head + 8 + slot * 4, 4);
+                if (off >= to) {
+                    off = (uint32_t)(off + delta);
+                    memcpy(head + 8 + slot * 4, &off, 4);
+                }
+            }
+            return fwrite(head, 1, HEAD, out) == HEAD && fwrite(dem + HEAD, 1, from - HEAD, out) == from - HEAD &&
+                   fwrite(frame.data(), 1, frame.size(), out) == frame.size() && fwrite(dem + to, 1, len - to, out) == len - to;
+        }
+        return false;
     }
 }

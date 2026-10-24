@@ -79,7 +79,7 @@ export type PerfMsg = { type: 'perf'; path: string; err: string; players: PerfRo
 
 export type Profile = { avatar: string; vac: boolean; limited: boolean; hidden: boolean; since: number }
 
-export type Player = { slot: number; name: string; crosshair?: string; steamid: string; team: number; voice: number; stats?: Stats }
+export type Player = { slot: number; name: string; crosshair?: string; steamid: string; team: number; voice: number; mute?: number; stats?: Stats }
 
 export type Roster = {
   type: 'roster'
@@ -157,7 +157,7 @@ export type Incoming =
   | { type: 'cache_cleared' }
   | { type: 'window'; maximized: boolean }
   | { type: 'watch'; state: 'unpacking' | 'copied' | 'error'; err?: string; line?: string }
-  | { type: 'fixed'; path: string; out: string; ok: boolean; err: string }
+  | { type: 'fixed'; path: string; ok: boolean; err: string }
 
 type Outgoing =
   | { type: 'ready' }
@@ -192,7 +192,7 @@ type Outgoing =
   | { type: 'delete_demos'; paths: string[] }
   | { type: 'move_demos'; paths: string[] }
   | { type: 'copy_paths'; paths: string[] }
-  | { type: 'watch'; path: string; low: number; high: number }
+  | { type: 'watch'; path: string; fix: boolean; low: number; high: number }
   | { type: 'set'; key: string; value: string }
   | { type: 'fix_demo'; path: string }
 

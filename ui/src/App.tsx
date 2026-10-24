@@ -194,8 +194,7 @@ export default function App() {
         if (m.state === 'copied') setTimeout(() => setWatch(w => (w?.state === m.state ? null : w)), 2500)
       }
       else if (m.type === 'fixed') {
-        setFixes(f => ({ ...f, [m.path]: m.ok ? { state: 'done', out: m.out } : { state: 'error', err: m.err } }))
-        if (m.ok) send({ type: 'rescan' })
+        setFixes(f => ({ ...f, [m.path]: m.ok ? { state: 'done' } : { state: 'error', err: m.err } }))
       }
       else if (m.type === 'close_ask') setAsking(true)
       else if (m.type === 'setup_error') setSetupErr(m.err)
@@ -702,7 +701,7 @@ function Rail(props: { page: Page; onPage: (p: Page) => void }) {
   )
 }
 
-type Fix = { state: 'running' | 'done' | 'error'; out?: string; err?: string }
+type Fix = { state: 'running' | 'done' | 'error'; err?: string }
 
 function DemoView(props: {
   demo: Demo
@@ -747,7 +746,7 @@ function DemoView(props: {
   const copyDemo = () => {
     if (!roster) return
     onWatch()
-    send({ type: 'watch', path: demo.path, ...masks(chosen) })
+    send({ type: 'watch', path: demo.path, fix: fix?.state === 'done', ...masks(chosen) })
   }
   const teams = useMemo(() => {
     const out: Player[][] = [[], []]
@@ -933,7 +932,7 @@ function DemoView(props: {
         <div className="notice pet">
           <span>
             {fix?.state === 'done'
-              ? t('petFixed', { name: (fix.out ?? '').split(/[\\/]/).pop() ?? '' })
+              ? t('petFixed')
               : fix?.state === 'error'
                 ? t('petFixFailed', { err: fix.err ?? '' })
                 : t('petCrash')}
@@ -1075,7 +1074,7 @@ function DemoView(props: {
                             <span className="nickline">
                               <span className="nick">{p.name || t('slot', { n: p.slot })}</span>
                               {mvp === p.slot && <span className="mvp-chip">{t('awardMvp')}</span>}
-                              <Badges profile={profiles[p.steamid]} />
+                              <Badges profile={profiles[p.steamid]} mute={p.mute} />
                             </span>
                             {hasVoice && (
                               <span className="meter">
@@ -2209,28 +2208,34 @@ function Tile(props: { measure: Measure; stats: Stats; pool: Stats[] }) {
   )
 }
 
-function Badges(props: { profile?: Profile }) {
+function Badges(props: { profile?: Profile; mute?: number }) {
   const { t } = useUi()
   const p = props.profile
-  if (!p) return null
+  const mute = props.mute ?? 0
+  if (!p && !mute) return null
   return (
     <span className="badges">
-      {p.vac && (
+      {mute > 0 && (
+        <span className="badge" title={t(mute & 2 ? 'muteAbuseTip' : 'muteTip')}>
+          {t('muteBadge')}
+        </span>
+      )}
+      {p?.vac && (
         <span className="badge bad">
           {t('vacBadge')}
         </span>
       )}
-      {p.limited && (
+      {p?.limited && (
         <span className="badge">
           {t('limitedBadge')}
         </span>
       )}
-      {p.hidden && (
+      {p?.hidden && (
         <span className="badge">
           {t('hiddenBadge')}
         </span>
       )}
-      {p.since > 0 && (
+      {p && p.since > 0 && (
         <span className="badge year">
           {p.since}
         </span>

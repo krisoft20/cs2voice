@@ -15,4 +15,5 @@ namespace basefix {
     void watch_frame(late_t& l, parser_t& p);
     bool crashes(const late_t& l);
     bool fix(const std::string& in, const std::string& out, std::string& err);
+    bool unmute(const uint8_t* dem, size_t len, FILE* out);
 }

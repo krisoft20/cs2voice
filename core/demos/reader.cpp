@@ -17,6 +17,7 @@ namespace reader {
         uint64_t steamid = 0;
         std::string name;
         std::string crosshair;
+        int mute = 0;
         int first = -1;
         int last = -1;
     };
@@ -24,6 +25,8 @@ namespace reader {
     struct state_t {
         field_key_t name = access::key("m_iszPlayerName");
         field_key_t crosshair = access::key("m_szCrosshairCodes");
+        field_key_t mute_flags[2] = {access::key("m_uiCommunicationMuteFlags"), access::key("m_uiCommunicationMuteFlagX")};
+        field_key_t mute_abuse[2] = {access::key("m_bHasCommunicationAbuseMute"), access::key("m_bHasCommunicationAbuseMutX")};
         field_key_t steam = access::key("m_steamID");
         field_key_t team = access::key("m_iTeamNum");
         field_key_t clan = access::key("m_szClanTeamname");
@@ -138,6 +141,12 @@ namespace reader {
             const std::string* code = cr ? access::get_str(*c, *cr) : nullptr;
             if (code && !code->empty())
                 sl.crosshair = *code;
+            for (int k = 0; k < 2; k++) {
+                if (const field_ref_t* m = access::ref(s.mute_flags[k], p.lay, p.ser, *c); m && access::get_int(*c, *m))
+                    sl.mute |= 1;
+                if (const field_ref_t* m = access::ref(s.mute_abuse[k], p.lay, p.ser, *c); m && access::get_bool(*c, *m))
+                    sl.mute |= 2;
+            }
             const field_ref_t* t = access::ref(s.team, p.lay, p.ser, *c);
             int side = t ? (int)access::get_int(*c, *t) : -1;
             if (side < 2 || side > 3)
@@ -252,6 +261,7 @@ namespace reader {
             pl.slot = i;
             pl.name = sl.name;
             pl.crosshair = sl.crosshair;
+            pl.mute = sl.mute;
             pl.steamid = sl.steamid;
             pl.team = (sl.first >= 0 ? sl.first : sl.last) - 2;
             auto sp = s.speakers.find(sl.steamid);

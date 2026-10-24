@@ -21,7 +21,7 @@ namespace jobs {
     };
 
     const char* CACHE_FORMAT = "cache 5";
-    const int DATA_VERSION = 16;
+    const int DATA_VERSION = 17;
 
     const int MAX_WORKERS = 8;
     const uint64_t GAME_CHECK_MS = 5000;
@@ -73,7 +73,7 @@ namespace jobs {
             if (i)
                 j += ",";
             j += "{\"slot\":" + std::to_string(p.slot) + ",\"name\":\"" + json::escape(p.name) + "\",\"crosshair\":\"" + json::escape(p.crosshair) + "\",\"steamid\":\"" +
-                 std::to_string(p.steamid) + "\",\"team\":" + std::to_string(p.team) + ",\"voice\":" + std::to_string(p.voice);
+                 std::to_string(p.steamid) + "\",\"team\":" + std::to_string(p.team) + ",\"voice\":" + std::to_string(p.voice) + ",\"mute\":" + std::to_string(p.mute);
             const player_stats_t& st = p.stats;
             j += ",\"stats\":{\"kills\":" + std::to_string(st.kills) + ",\"deaths\":" + std::to_string(st.deaths) +
                  ",\"assists\":" + std::to_string(st.assists) + ",\"damage\":" + std::to_string(st.damage) +

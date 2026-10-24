@@ -18,7 +18,6 @@
 #include "bridge/watch.h"
 #include "dbg.h"
 #include "demos/finder.h"
-#include "demos/basefix.h"
 #include "json/json.h"
 #include "platform/files.h"
 #include "platform/setup.h"
@@ -498,16 +497,6 @@ namespace bridge {
         return out + "-fixed.dem";
     }
 
-    void fix_demo(const std::string& path) {
-        std::string out = fixed_path(path);
-        std::thread([path, out] {
-            std::string err;
-            bool ok = basefix::fix(path, out, err);
-            window::post_json("{\"type\":\"fixed\",\"path\":\"" + json::escape(path) + "\",\"out\":\"" + json::escape(out) + "\",\"ok\":" + (ok ? "true" : "false") +
-                              ",\"err\":\"" + json::escape(err) + "\"}");
-        }).detach();
-    }
-
     void reveal(const std::string& path) {
         std::wstring args = L"/select,\"" + text::wide(path) + L"\"";
         ShellExecuteW(window::handle(), L"open", L"explorer.exe", args.c_str(), nullptr, SW_SHOWNORMAL);
@@ -568,6 +557,8 @@ namespace bridge {
             web::post("{\"type\":\"me\",\"steamid\":\"" + std::to_string(finder::current_user()) + "\"}");
             send_folders();
             rescan();
+            for (const std::string& src : launch::fixed_sources())
+                web::post("{\"type\":\"fixed\",\"path\":\"" + json::escape(src) + "\",\"ok\":true,\"err\":\"\"}");
         } else if (type == "open") {
             open(json::str(json::at(j, "path")));
         } else if (type == "copy") {
@@ -693,11 +684,13 @@ namespace bridge {
             send_storage();
         } else if (type == "watch") {
             std::string path = json::str(json::at(j, "path"));
+            const json_t* fix = json::at(j, "fix");
             const demo_file_t* f = file_of(fixed_path(path));
+            bool repair = !f && fix && fix->kind == jk_bool && fix->b;
             if (!f)
                 f = file_of(path);
             if (f)
-                launch::watch(*f, (uint32_t)(int64_t)json::num(json::at(j, "low")), (uint32_t)(int64_t)json::num(json::at(j, "high")));
+                launch::watch(*f, (uint32_t)(int64_t)json::num(json::at(j, "low")), (uint32_t)(int64_t)json::num(json::at(j, "high")), repair);
         } else if (type == "save_clip") {
             save_clip(json::str(json::at(j, "name")), json::str(json::at(j, "data")));
         } else if (type == "track") {
@@ -734,8 +727,11 @@ namespace bridge {
         } else if (type == "reveal") {
             reveal(json::str(json::at(j, "path")));
         } else if (type == "fix_demo") {
-            if (const demo_file_t* f = file_of(json::str(json::at(j, "path"))))
-                fix_demo(f->path);
+            std::string path = json::str(json::at(j, "path"));
+            if (file_of(fixed_path(path)))
+                web::post("{\"type\":\"fixed\",\"path\":\"" + json::escape(path) + "\",\"ok\":true,\"err\":\"\"}");
+            else if (const demo_file_t* f = file_of(path))
+                launch::prepare_fix(*f);
         } else {
             dbg::print("[bridge] unknown message %s", type.c_str());
         }
