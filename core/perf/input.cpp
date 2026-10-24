@@ -106,21 +106,43 @@ namespace input {
         return (item >= 1 && item < 42) || item == 60 || item == 61 || item == 63 || item == 64;
     }
 
+    bool sniper(uint32_t item) {
+        return item == 9 || item == 11 || item == 38 || item == 40;
+    }
+
+    bool rifle(uint32_t item) {
+        return item == 7 || item == 8 || item == 10 || item == 13 || item == 16 || item == 39 || item == 60;
+    }
+
+    bool enemy_seen(const match_t& m, int slot, int team, int tick) {
+        for (const player_t& en : m.players) {
+            if (en.slot < 0 || en.slot == slot || slot >= 64)
+                continue;
+            const pstate_t* b = model::at(m, en.slot, tick);
+            if (b && (b->flags & pf_alive) && b->team >= 2 && b->team != team && ((b->spotted[slot >> 5] >> (slot & 31)) & 1))
+                return true;
+        }
+        return false;
+    }
+
     shots_t shots(const match_t& m, int slot) {
         shots_t out;
         std::set<int> first_ticks;
         for (const fire_t& f : m.fires) {
-            if (f.slot != slot || f.recoil >= 0.5f || !aimed_gun(f.item))
+            if (f.slot != slot)
                 continue;
             const pstate_t* s = model::at(m, slot, f.tick);
-            if (!s || !(s->flags & pf_alive) || !(s->flags & pf_live) || !first_ticks.insert(f.tick).second)
+            if (!s || !(s->flags & pf_alive) || !(s->flags & pf_live) || !enemy_seen(m, slot, s->team, f.tick))
                 continue;
-            out.first++;
-            float top = weapons::max_speed(f.item, (s->flags & pf_scoped) != 0);
-            if (top > 0) {
-                out.stops++;
-                out.stopped += std::hypot(s->vel[0], s->vel[1]) <= ACCURATE_SPEED * top;
+            if (rifle(f.item) && !(s->flags & pf_ducked)) {
+                float top = weapons::max_speed(f.item, (s->flags & pf_scoped) != 0);
+                if (top > 0) {
+                    out.stops++;
+                    out.stopped += std::hypot(s->vel[0], s->vel[1]) <= ACCURATE_SPEED * top;
+                }
             }
+            if (f.recoil < 0.5f && aimed_gun(f.item) && !sniper(f.item) && first_ticks.insert(f.tick).second)
+                out.first++;
         }
         std::set<int> hit_ticks;
         for (const hurt_t& h : m.hurts) {
@@ -141,15 +163,9 @@ namespace input {
         return std::hypot(s->vel[0], s->vel[1]);
     }
 
-    double gap(const pstate_t* a, const pstate_t* b) {
-        double x = a->pos[0] - b->pos[0], y = a->pos[1] - b->pos[1], z = a->pos[2] - b->pos[2];
-        return std::sqrt(x * x + y * y + z * z);
-    }
-
     swings_t swings(const match_t& m, int slot) {
         swings_t out;
-        double range = weapons::step_range();
-        if (slot < 0 || slot >= (int)m.players.size() || range <= 0 || m.tick_interval <= 0)
+        if (slot < 0 || slot >= (int)m.players.size() || m.tick_interval <= 0)
             return out;
         int rate = (int)std::lround(1.0 / m.tick_interval);
         std::vector<double> walks;
@@ -220,30 +236,15 @@ namespace input {
             if (peak <= walk_top)
                 continue;
             auto st = std::lower_bound(steps.begin(), steps.end(), start);
-            int step = st != steps.end() && *st <= stop ? *st : -1;
-            bool close = false, heard = false, kill = false;
-            for (const player_t& en : m.players) {
-                if (en.slot < 0 || en.slot == slot)
+            bool heard = st != steps.end() && *st <= stop;
+            bool kill = false;
+            for (const death_t& d : m.deaths) {
+                if (d.attacker != slot || d.victim < 0 || d.victim == slot || d.tick < start || d.tick > stop + 2 * rate)
                     continue;
-                const pstate_t* b = model::at(m, en.slot, start);
-                if (!b || !(b->flags & pf_alive) || b->team == a1->team || b->team < 2)
-                    continue;
-                for (int u = start; u <= stop && !close; u += 4) {
-                    const pstate_t* au = model::at(m, slot, u);
-                    const pstate_t* bu = model::at(m, en.slot, u);
-                    close = au && bu && (bu->flags & pf_alive) && gap(au, bu) <= range;
-                }
-                if (step >= 0) {
-                    const pstate_t* as = model::at(m, slot, step);
-                    const pstate_t* bs = model::at(m, en.slot, step);
-                    heard |= as && bs && (bs->flags & pf_alive) && gap(as, bs) <= range;
-                }
-                for (const death_t& d : m.deaths)
-                    kill |= d.attacker == slot && d.victim == en.slot && d.tick >= start && d.tick <= stop + 2 * rate;
+                const pstate_t* v = model::at(m, d.victim, d.tick);
+                kill |= v && v->team != a1->team;
             }
-            if (!close)
-                continue;
-            out.close++;
+            out.total++;
             out.good += !heard || kill;
         }
         return out;

@@ -10,7 +10,7 @@ struct shots_t {
 };
 
 struct swings_t {
-    int close = 0;
+    int total = 0;
     int good = 0;
 };
 

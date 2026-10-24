@@ -10,19 +10,8 @@
 namespace weapons {
     std::map<int, std::string> g_names;
     std::map<std::string, std::pair<float, float>> g_speeds;
-    double g_step_range = 0;
     std::mutex g_mu;
     bool g_loaded = false;
-
-    double silent_at(const kv_node_t& ev) {
-        const kv_node_t* c = kv3::get(ev, "distance_volume_mapping_curve");
-        if (!c || c->type != kv_array)
-            return 0;
-        for (const kv_node_t& pt : c->items)
-            if (pt.type == kv_array && pt.items.size() >= 2 && pt.items[0].d > 0 && pt.items[1].d <= 0)
-                return pt.items[0].d;
-        return 0;
-    }
 
     void on_items(const std::vector<std::string>& path, const std::string& key, const std::string& value) {
         if (path.size() == 3 && path[0] == "items_game" && path[1] == "items" && key == "name")
@@ -65,26 +54,8 @@ namespace weapons {
             if (k.rfind("weapon_", 0) == 0 && speed_of(root, k, s))
                 g_speeds[k] = s;
         }
-        kv_node_t sounds;
-        if (!vpk::extract(pak, "soundevents/game_sounds_footsteps.vsndevts_c", file, err) || !vpk::block(file, "DATA", blk, len) || !kv3::read(blk, len, sounds, err))
-            return false;
-        std::map<double, int> ranges;
-        for (const kv_node_t& ev : sounds.items)
-            if (double r = silent_at(ev); r > 0)
-                ranges[r]++;
-        int most = 0;
-        for (auto& [r, n] : ranges)
-            if (n > most) {
-                most = n;
-                g_step_range = r;
-            }
         g_loaded = true;
         return true;
-    }
-
-    double step_range() {
-        std::lock_guard<std::mutex> lock(g_mu);
-        return g_step_range;
     }
 
     float max_speed(uint32_t def, bool alt) {

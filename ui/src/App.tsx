@@ -873,6 +873,7 @@ function DemoView(props: {
             <FolderIcon />
             {t('showFile')}
           </button>
+          {fix?.state === 'done' && <span className="tag voice">{t('fixedTag')}</span>}
         </div>
         {roster && roster.players.length > 0 && (
           <nav className="tabs" ref={tabsRef}>
@@ -928,20 +929,12 @@ function DemoView(props: {
         <div className="notice bad">{t('unreadable', { err: roster.err || t('unknownFormat') })}</div>
       )}
 
-      {roster?.pet_crash && (
+      {roster?.pet_crash && fix?.state !== 'done' && (
         <div className="notice pet">
-          <span>
-            {fix?.state === 'done'
-              ? t('petFixed')
-              : fix?.state === 'error'
-                ? t('petFixFailed', { err: fix.err ?? '' })
-                : t('petCrash')}
-          </span>
-          {fix?.state !== 'done' && (
-            <button onClick={onFix} disabled={fix?.state === 'running'}>
-              {fix?.state === 'running' ? t('petFixing') : t('petFix')}
-            </button>
-          )}
+          <span>{fix?.state === 'error' ? t('petFixFailed', { err: fix.err ?? '' }) : t('petCrash')}</span>
+          <button onClick={onFix} disabled={fix?.state === 'running'}>
+            {fix?.state === 'running' ? t('petFixing') : t('petFix')}
+          </button>
         </div>
       )}
 
@@ -1713,7 +1706,7 @@ function PerfTile(props: { kind: (typeof PERF_TILES)[number]; value: number | nu
 
 const SHOT_TILES: { key: 'firstShot' | 'counterStrafe' | 'swings'; note: Key; of: (r: PerfRow) => [number, number] }[] = [
   { key: 'firstShot', note: 'firstShots', of: r => [r.first_hits, r.first] },
-  { key: 'counterStrafe', note: 'firstShots', of: r => [r.stopped, r.stops] },
+  { key: 'counterStrafe', note: 'rifleShots', of: r => [r.stopped, r.stops] },
   { key: 'swings', note: 'swingsNote', of: r => [r.swings_good, r.swings] },
 ]
 

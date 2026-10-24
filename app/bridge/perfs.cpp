@@ -20,7 +20,7 @@
 
 namespace perfs {
     const char* CACHE_FORMAT = "perfs 1";
-    const int DATA_VERSION = 5;
+    const int DATA_VERSION = 6;
 
     struct entry_t {
         int version = 0;
@@ -244,7 +244,7 @@ namespace perfs {
             out += ",\"first\":" + std::to_string(sh.first) + ",\"first_hits\":" + std::to_string(sh.first_hits) + ",\"stops\":" + std::to_string(sh.stops) +
                    ",\"stopped\":" + std::to_string(sh.stopped);
             swings_t sw = input::swings(*m, pl.slot);
-            out += ",\"swings\":" + std::to_string(sw.close) + ",\"swings_good\":" + std::to_string(sw.good);
+            out += ",\"swings\":" + std::to_string(sw.total) + ",\"swings_good\":" + std::to_string(sw.good);
             out += "}";
         };
         std::atomic<size_t> next = 0;
