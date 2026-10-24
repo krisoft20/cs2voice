@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.25)
-project(cs2voice VERSION 0.1.3 LANGUAGES CXX)
+project(cs2voice VERSION 0.1.4 LANGUAGES CXX)
 
 if(NOT MSVC)
     message(FATAL_ERROR "cs2voice builds with msvc on windows")
