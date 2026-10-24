@@ -75,6 +75,12 @@ struct player_stats_t {
     int utility_damage = 0;
     int enemies_flashed = 0;
     int flash_assists = 0;
+    int ping_sum = 0;
+    int flashes = 0;
+    int enemy_blinds = 0;
+    double enemy_blind = 0;
+    double team_blind = 0;
+    int ping_n = 0;
     std::vector<round_line_t> lines;
     std::vector<round_eco_t> eco;
 };
@@ -109,6 +115,7 @@ struct stats_t {
     field_key_t team = access::key("m_iTeamNum");
     field_key_t alive = access::key("m_bPawnIsAlive");
     field_key_t score = access::key("m_iScore");
+    field_key_t ping = access::key("m_iPing");
     field_key_t utility = access::key("m_pActionTrackingServices.m_matchStats.m_iUtilityDamage");
     field_key_t flashed = access::key("m_pActionTrackingServices.m_matchStats.m_iEnemiesFlashed");
     field_key_t freeze = access::key("m_pGameRules.m_bFreezePeriod");

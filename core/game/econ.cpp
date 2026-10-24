@@ -50,8 +50,6 @@ namespace econ {
     std::string g_lang;
     bool g_items = false;
 
-    typedef void (*pair_fn_t)(const std::vector<std::string>& path, const std::string& key, const std::string& value);
-
     void parse(const char* p, const char* end, pair_fn_t fn) {
         std::vector<std::string> path;
         std::string key, tok;

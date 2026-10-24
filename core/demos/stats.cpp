@@ -4,6 +4,7 @@
 
 namespace stats {
     const float TRADE_SECONDS = 5.f;
+    const float FLASHED_SECONDS = 1.f;
     const int HEAD = 1;
 
     int pawn_of(const game_event_t& e, const char* key) {
@@ -121,6 +122,12 @@ namespace stats {
             s.round[i].in = side == 2 || side == 3;
             s.round[i].alive = s.round[i].in && f && access::get_bool(*c, *f);
             s.round[i].side = side;
+            const field_ref_t* pf = c && s.round[i].in ? access::ref(s.ping, p.lay, p.ser, *c) : nullptr;
+            int ms = pf ? (int)access::get_int(*c, *pf) : 0;
+            if (ms > 0 && ms < 1000) {
+                s.players[i].ping_sum += ms;
+                s.players[i].ping_n++;
+            }
         }
         s.deaths.clear();
         s.info = round_info_t{};
@@ -237,6 +244,24 @@ namespace stats {
         } else if (name == "player_death") {
             if (s.live)
                 death(s, p, e);
+        } else if (name == "flashbang_detonate") {
+            int slot = slot_of(e, "userid");
+            if (s.live && s.in_round && slot >= 0)
+                s.players[slot].flashes++;
+        } else if (name == "player_blind") {
+            int victim = slot_of(e, "userid"), attacker = slot_of(e, "attacker");
+            double sec = game_events::flt(e, "blind_duration", 0.f);
+            if (s.live && s.in_round && victim >= 0 && attacker >= 0 && victim != attacker && sec > 0) {
+                int va = team_of(s, p, victim), aa = team_of(s, p, attacker);
+                if ((va == 2 || va == 3) && (aa == 2 || aa == 3)) {
+                    if (va != aa) {
+                        s.players[attacker].enemy_blinds += sec >= FLASHED_SECONDS;
+                        s.players[attacker].enemy_blind += sec;
+                    } else {
+                        s.players[attacker].team_blind += sec;
+                    }
+                }
+            }
         } else if (name == "bomb_planted" || name == "bomb_defused" || name == "bomb_exploded") {
             if (s.live && s.in_round)
                 s.info.bomb.push_back({p.tick, slot_of(e, "userid"), name == "bomb_planted" ? 0 : name == "bomb_defused" ? 1 : 2});

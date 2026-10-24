@@ -1,5 +1,6 @@
 import type { Stats } from './bridge'
 import type { Key } from './i18n'
+import { REFERENCE } from './reference'
 
 export type Measure = {
   key: Key
@@ -22,6 +23,29 @@ export const rating = (s: Stats) => {
   return 0.0073 * kast + 0.3591 * kpr - 0.5329 * dpr + 0.2372 * impact + 0.0032 * adr + 0.1587
 }
 
+export const percentile = (q: number[], x: number) => {
+  if (x < q[0]) return 0
+  if (x > q[20]) return 100
+  let a = 0
+  let b = 20
+  while (a < 20 && q[a] < x) a++
+  while (b > 0 && q[b] > x) b--
+  if (a <= b) return (5 * (a + b)) / 2
+  return 5 * (b + (x - q[b]) / (q[a] - q[b]))
+}
+
+export const utility = (s: Stats) => {
+  if (s.rounds <= 0 || s.flashes === undefined) return null
+  const parts = [
+    percentile(REFERENCE.utility_damage, s.utility_damage / s.rounds),
+    percentile(REFERENCE.flash_assists, s.flash_assists / s.rounds),
+    100 - percentile(REFERENCE.team_blind, s.team_blind_ms / 1000 / s.rounds),
+  ]
+  if (s.flashes > 0)
+    parts.push(percentile(REFERENCE.flash_blinds, s.enemy_blinds / s.flashes), percentile(REFERENCE.flash_blind, s.enemy_blind_ms / 1000 / s.flashes))
+  return parts.reduce((x, y) => x + y, 0) / parts.length
+}
+
 export const MEASURES: Measure[] = [
   { key: 'rating', unit: '', digits: 2, of: rating },
   { key: 'kd', unit: '', digits: 2, of: s => per(s.kills, s.deaths) },
@@ -31,6 +55,7 @@ export const MEASURES: Measure[] = [
   { key: 'headAccuracy', unit: '%', digits: 1, of: s => pct(s.head_hits, s.hits) },
   { key: 'wallbangKills', unit: '%', digits: 1, of: s => pct(s.wallbang_kills, s.kills) },
   { key: 'smokeKills', unit: '%', digits: 1, of: s => pct(s.smoke_kills, s.kills) },
+  { key: 'utilityRating', unit: '', digits: 0, of: utility },
 ]
 
 export const median = (v: number[]) => {

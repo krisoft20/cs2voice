@@ -21,11 +21,12 @@ namespace jobs {
     };
 
     const char* CACHE_FORMAT = "cache 5";
-    const int DATA_VERSION = 11;
+    const int DATA_VERSION = 16;
 
     const int MAX_WORKERS = 8;
     const uint64_t GAME_CHECK_MS = 5000;
     const int UNPACK_THREADS = 3;
+    const int GAME_THREADS = 3;
 
     struct worker_t {
         std::thread thread;
@@ -53,7 +54,7 @@ namespace jobs {
     std::string roster_json(const demo_file_t& f, const roster_t& r, bool ok) {
         std::string j = "{\"type\":\"roster\",\"path\":\"" + json::escape(f.path) + "\",\"ok\":" + (ok ? "true" : "false") +
                         ",\"partial\":" + (r.partial ? "true" : "false") + ",\"ended\":" + (r.ended ? "true" : "false") +
-                        ",\"voice_known\":" + (r.voice_known ? "true" : "false");
+                        ",\"voice_known\":" + (r.voice_known ? "true" : "false") + ",\"pet_crash\":" + (r.pet_crash ? "true" : "false");
         j += ",\"err\":\"" + json::escape(r.err) + "\"";
         j += ",\"map\":\"" + json::escape(r.map) + "\",\"server\":\"" + json::escape(r.server) + "\"";
         j += ",\"voice\":" + std::to_string(r.voice) + ",\"duration\":" + std::to_string(r.duration) +
@@ -85,7 +86,10 @@ namespace jobs {
                  ",\"clutches\":" + std::to_string(st.clutches) + ",\"k2\":" + std::to_string(st.multi[2]) +
                  ",\"k3\":" + std::to_string(st.multi[3]) + ",\"k4\":" + std::to_string(st.multi[4]) + ",\"k5\":" + std::to_string(st.multi[5]) +
                  ",\"utility_damage\":" + std::to_string(st.utility_damage) + ",\"enemies_flashed\":" + std::to_string(st.enemies_flashed) +
-                 ",\"flash_assists\":" + std::to_string(st.flash_assists) + ",\"lines\":[";
+                 ",\"flash_assists\":" + std::to_string(st.flash_assists) +
+                 ",\"ping\":" + std::to_string(st.ping_n ? (st.ping_sum + st.ping_n / 2) / st.ping_n : 0) +
+                 ",\"flashes\":" + std::to_string(st.flashes) + ",\"enemy_blinds\":" + std::to_string(st.enemy_blinds) +
+                 ",\"enemy_blind_ms\":" + std::to_string((long long)(st.enemy_blind * 1000 + 0.5)) + ",\"team_blind_ms\":" + std::to_string((long long)(st.team_blind * 1000 + 0.5)) + ",\"lines\":[";
             for (size_t k = 0; k < st.lines.size(); k++) {
                 const round_line_t& l = st.lines[k];
                 j += std::string(k ? "," : "") + "[" + (l.in ? "1" : "0") + "," + std::to_string(l.kills) + "," + (l.died ? "1" : "0") + "," +
@@ -237,9 +241,9 @@ namespace jobs {
             CloseHandle(snap);
         }
         if (found != g_game_running || first) {
-            dbg::print("[jobs] cs2 %s", found ? "running, reading demos on one thread" : "closed");
+            dbg::print("[jobs] cs2 %s", found ? "running, reading demos on idle threads" : "closed");
             zstdx::set_threads(found ? 1 : UNPACK_THREADS);
-            perfs::set_threads(found ? 1 : 0);
+            perfs::set_threads(found ? GAME_THREADS : 0, found);
         }
         g_game_running = found;
         return found;

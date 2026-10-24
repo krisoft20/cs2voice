@@ -1,8 +1,8 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import type { ReactNode } from 'react'
-import { listen, send, type CleanupCfg, type SetupInfo, type Demo, type Folder, type Player, type Profile, type Roster, type Stats, type Storage, type PerfMsg, type SkinsMsg, type SkinItem } from './bridge'
+import { listen, send, type CleanupCfg, type SetupInfo, type Demo, type Folder, type Player, type Profile, type Roster, type Stats, type Storage, type PerfMsg, type PerfRow, type SkinsMsg, type SkinItem } from './bridge'
 import { LANGS, gameLang, resolve, translator, type Key, type Lang, type LangChoice } from './i18n'
-import { BoltIcon, BombIcon, CalendarIcon, CheckIcon, ChevronDownIcon, ChevronLeftIcon, ChevronRightIcon, ClockIcon, CloseIcon, CloudIcon, CrownIcon, DemosIcon, DiskIcon, DoorIcon, FlameIcon, FolderIcon, FolderPlusIcon, HelpIcon, InfoIcon, LanguageIcon, LogoMark, MicIcon, MinusIcon, PaletteIcon, PlayIcon, PlusIcon, RefreshIcon, SettingsIcon, ShieldIcon, Speaker, SteamIcon, SunIcon, TargetIcon, TradeIcon, UsersIcon, WallIcon } from './icons'
+import { BoltIcon, BombIcon, CalendarIcon, CheckIcon, ChevronDownIcon, ChevronLeftIcon, ChevronRightIcon, ClockIcon, CloseIcon, CloudIcon, CrownIcon, DemosIcon, DiskIcon, DoorIcon, FlameIcon, FolderIcon, FolderPlusIcon, HelpIcon, InfoIcon, LanguageIcon, LogoMark, MicIcon, MinusIcon, PaletteIcon, PlayIcon, PlusIcon, RefreshIcon, SearchIcon, SettingsIcon, ShieldIcon, Speaker, SteamIcon, SunIcon, TargetIcon, TradeIcon, UsersIcon, WallIcon } from './icons'
 import { Avatar, UiContext, useUi, type Loader } from './common'
 import { decode, draw } from './crosshair'
 import { Check, CleanupCard, CleanupReview, CleanupSettings } from './Cleanup'
@@ -63,6 +63,8 @@ export default function App() {
   const [icons, setIcons] = useState(false)
   const [saved, setSaved] = useState('')
   const [watch, setWatch] = useState<{ state: string; err?: string } | null>(null)
+  const [fixes, setFixes] = useState<Record<string, Fix>>({})
+  const [search, setSearch] = useState<string | null>(null)
   const [storage, setStorage] = useState<Storage[]>([])
   const [cleanup, setCleanup] = useState<CleanupCfg>({ mode: 'ask', method: 'recycle', days: 7, copies: true, broken: true, mute: false, snooze: 0, skip: [] })
   const [review, setReview] = useState(false)
@@ -190,6 +192,10 @@ export default function App() {
         setWatch({ state: m.state, err: m.err })
         if (m.state === 'copied') setTimeout(() => setWatch(w => (w?.state === m.state ? null : w)), 2500)
       }
+      else if (m.type === 'fixed') {
+        setFixes(f => ({ ...f, [m.path]: m.ok ? { state: 'done', out: m.out } : { state: 'error', err: m.err } }))
+        if (m.ok) send({ type: 'rescan' })
+      }
       else if (m.type === 'close_ask') setAsking(true)
       else if (m.type === 'setup_error') setSetupErr(m.err)
       else if (m.type === 'update') setUpdate({ version: m.version, notes: m.notes, size: m.size ?? 0 })
@@ -295,6 +301,14 @@ export default function App() {
             <aside className="side">
               <header className="side-head">
                 <span>cs2voice</span>
+                <span className="side-tools">
+                <button
+                  className={`icon-btn${search !== null ? ' on' : ''}`}
+                  onClick={() => setSearch(s => (s === null ? '' : null))}
+                  aria-label={ui.t('search')}
+                >
+                  <SearchIcon />
+                </button>
                 <button
                   className={`icon-btn${spinning ? ' spinning' : ''}`}
                   onClick={() => {
@@ -308,7 +322,19 @@ export default function App() {
                     <RefreshIcon />
                   </span>
                 </button>
+                </span>
               </header>
+              {search !== null && (
+                <div className="side-search">
+                  <input
+                    autoFocus
+                    value={search}
+                    placeholder={ui.t('searchHint')}
+                    onChange={e => setSearch(e.target.value)}
+                    onKeyDown={e => e.key === 'Escape' && setSearch(null)}
+                  />
+                </div>
+              )}
               {cleanup.mode === 'ask' && plan.length > 0 && Date.now() / 1000 > cleanup.snooze && (
                 <CleanupCard
                   plan={plan}
@@ -320,7 +346,7 @@ export default function App() {
                   }}
                 />
               )}
-              <DemoList demos={demos} rosters={rosters} art={art} selected={selected} onSelect={setSelected} />
+              <DemoList demos={demos} rosters={rosters} art={art} selected={selected} onSelect={setSelected} query={search ?? ''} />
             </aside>
             <main className="main">
               {demo ? (
@@ -346,6 +372,11 @@ export default function App() {
                   saved={saved}
                   watch={watch}
                   onWatch={() => setWatch({ state: 'asked' })}
+                  fix={fixes[demo.path]}
+                  onFix={() => {
+                    setFixes(f => ({ ...f, [demo.path]: { state: 'running' } }))
+                    send({ type: 'fix_demo', path: demo.path })
+                  }}
                 />
               ) : (
                 <Empty loading={demos === null} />
@@ -669,6 +700,8 @@ function Rail(props: { page: Page; onPage: (p: Page) => void }) {
   )
 }
 
+type Fix = { state: 'running' | 'done' | 'error'; out?: string; err?: string }
+
 function DemoView(props: {
   demo: Demo
   roster?: Roster
@@ -690,9 +723,11 @@ function DemoView(props: {
   saved: string
   watch: { state: string; err?: string } | null
   onWatch: () => void
+  fix?: Fix
+  onFix: () => void
 }) {
   const { t, lang, me } = useUi()
-  const { demo, roster, chosen, setChosen, copied, avatars, profiles, art, pool, voice, track, radar, perf, skins, econ, icons, saved, watch, onWatch } = props
+  const { demo, roster, chosen, setChosen, copied, avatars, profiles, art, pool, voice, track, radar, perf, skins, econ, icons, saved, watch, onWatch, fix, onFix } = props
   const [seenVoices, setSeenVoices] = useState(false)
   const [tab, setTab] = useState<'overview' | 'players' | 'details' | 'voices' | 'radar' | 'crosshairs' | 'skins'>('overview')
   const [focus, setFocus] = useState<number | null>(null)
@@ -707,9 +742,8 @@ function DemoView(props: {
   }, [tab, demo.path, !!roster, roster?.partial, roster?.stale, lang])
   const copyDemo = () => {
     if (!roster) return
-    const slots = chosen.size ? chosen : new Set(roster.players.map(p => p.slot))
     onWatch()
-    send({ type: 'watch', path: demo.path, ...masks(slots) })
+    send({ type: 'watch', path: demo.path, ...masks(chosen) })
   }
   const teams = useMemo(() => {
     const out: Player[][] = [[], []]
@@ -891,6 +925,23 @@ function DemoView(props: {
         <div className="notice bad">{t('unreadable', { err: roster.err || t('unknownFormat') })}</div>
       )}
 
+      {roster?.pet_crash && (
+        <div className="notice pet">
+          <span>
+            {fix?.state === 'done'
+              ? t('petFixed', { name: (fix.out ?? '').split(/[\\/]/).pop() ?? '' })
+              : fix?.state === 'error'
+                ? t('petFixFailed', { err: fix.err ?? '' })
+                : t('petCrash')}
+          </span>
+          {fix?.state !== 'done' && (
+            <button onClick={onFix} disabled={fix?.state === 'running'}>
+              {fix?.state === 'running' ? t('petFixing') : t('petFix')}
+            </button>
+          )}
+        </div>
+      )}
+
       {roster && hasStats && tab === 'players' && (
         <div className="scroll pane">
           <div className="players">
@@ -903,7 +954,10 @@ function DemoView(props: {
                     return (
                       <button key={p.slot} className={`pl-row${focused?.slot === p.slot ? ' on' : ''}`} onClick={() => setFocus(p.slot)}>
                         <Avatar url={avatars[p.steamid]} name={p.name} />
-                        <span className="pl-name">{p.name || t('slot', { n: p.slot })}</span>
+                        <span className="pl-who">
+                          <span className="pl-name">{p.name || t('slot', { n: p.slot })}</span>
+                          <SetupLine ping={p.stats?.ping} row={perf?.players.find(row => row.steamid === p.steamid)} />
+                        </span>
                         {p.stats && (
                           <span className="pl-kda">
                             {p.stats.kills}/{p.stats.deaths}/{p.stats.assists}
@@ -931,6 +985,9 @@ function DemoView(props: {
                     const row = perf?.players.find(r => r.steamid === focused.steamid)
                     return <PerfTile key={k.key} kind={k} value={row ? row[k.key] : null} n={row ? row[`${k.key}_n`] : 0} waiting={!perf} />
                   })}
+                  {SHOT_TILES.map(k => (
+                    <ShotTile key={k.key} kind={k} row={perf?.players.find(r => r.steamid === focused.steamid)} waiting={!perf} />
+                  ))}
                 </div>
               </section>
             )}
@@ -1310,7 +1367,7 @@ const ratingTone = (r: number | null) => {
   return undefined
 }
 
-const NORMS: Partial<Record<Key, { ref: string; good: boolean; low?: boolean }>> = {
+const NORMS: Partial<Record<Key, { ref: string; good: boolean; low?: boolean; open?: boolean }>> = {
   ttd: { ref: 'ttd', good: true, low: true },
   reaction: { ref: 'reaction', good: true, low: true },
   placement: { ref: 'placement', good: true, low: true },
@@ -1321,6 +1378,10 @@ const NORMS: Partial<Record<Key, { ref: string; good: boolean; low?: boolean }>>
   headAccuracy: { ref: 'head_hits', good: true },
   wallbangKills: { ref: 'wallbang', good: false },
   smokeKills: { ref: 'smoke', good: false },
+  utilityRating: { ref: 'utility', good: true, open: true },
+  firstShot: { ref: 'first_shot', good: true },
+  counterStrafe: { ref: 'counter_strafe', good: true },
+  swings: { ref: 'swing', good: true },
 }
 
 const normTone = (key: Key, unit: string, v: number | null) => {
@@ -1337,6 +1398,7 @@ const normTone = (key: Key, unit: string, v: number | null) => {
     return green((10 - at + part) / 10)
   }
   const top = q[20]
+  if (x > top && norm.open) return green(1)
   if (x > top) return red(Math.min(1, (x - top) / Math.max(top - q[19], 1e-9)))
   if (!norm.good || x <= q[10]) return undefined
   let at = 10
@@ -1415,6 +1477,21 @@ function UninstallAsk(props: { onClose: () => void }) {
         </div>
       </div>
     </div>
+  )
+}
+
+function SetupLine(props: { ping?: number; row?: PerfRow }) {
+  const parts: string[] = []
+  if (props.ping) parts.push(`${props.ping} ms`)
+  if (props.row?.fps) parts.push(`${Math.round(props.row.fps)} FPS`)
+  if (props.row?.sens) parts.push(`${Number(props.row.sens.toFixed(3))} sens`)
+  if (!parts.length) return null
+  return (
+    <span className="pl-setup">
+      {parts.map(p => (
+        <span key={p}>{p}</span>
+      ))}
+    </span>
   )
 }
 
@@ -1627,6 +1704,29 @@ function PerfTile(props: { kind: (typeof PERF_TILES)[number]; value: number | nu
         {!waiting && value !== null && <small>{kind.unit}</small>}
       </div>
       {!waiting && <div className="tile-note">{t('samples', { n })}</div>}
+    </div>
+  )
+}
+
+const SHOT_TILES: { key: 'firstShot' | 'counterStrafe' | 'swings'; note: Key; of: (r: PerfRow) => [number, number] }[] = [
+  { key: 'firstShot', note: 'firstShots', of: r => [r.first_hits, r.first] },
+  { key: 'counterStrafe', note: 'firstShots', of: r => [r.stopped, r.stops] },
+  { key: 'swings', note: 'swingsNote', of: r => [r.swings_good, r.swings] },
+]
+
+function ShotTile(props: { kind: (typeof SHOT_TILES)[number]; row?: PerfRow; waiting: boolean }) {
+  const { t, lang } = useUi()
+  const { kind, row, waiting } = props
+  const [part, n] = row ? kind.of(row).map(v => v ?? 0) : [0, 0]
+  const value = n > 0 ? (100 * part) / n : null
+  return (
+    <div className="tile">
+      <div className="tile-label">{t(kind.key)}</div>
+      <div className="tile-value" style={normTone(kind.key, '%', value)}>
+        {waiting ? <TabSpin on /> : fmt(value, 1, lang)}
+        {!waiting && value !== null && <small>%</small>}
+      </div>
+      {!waiting && <div className="tile-note">{t(kind.note, { n })}</div>}
     </div>
   )
 }

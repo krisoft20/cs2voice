@@ -11,22 +11,30 @@ export function DemoList(props: {
   art: Record<string, boolean>
   selected: string | null
   onSelect: (p: string) => void
+  query: string
 }) {
   const { t, lang, me } = useUi()
-  const { demos, rosters, art, selected, onSelect } = props
+  const { demos: all, rosters, art, selected, onSelect, query } = props
   const [picked, setPicked] = useState<Set<string>>(new Set())
   const [anchor, setAnchor] = useState<string | null>(null)
   const [menu, setMenu] = useState<Menu | null>(null)
   const [confirm, setConfirm] = useState<string[] | null>(null)
 
+  const words = query.toLowerCase().split(/\s+/).filter(Boolean)
+  const demos = !all || !words.length ? all : all.filter(d => {
+    const r = rosters[d.path]
+    const hay = [d.name, r?.map ?? '', r ? mapName(r.map, t) : '', ...(r ? teamLabels(r, me, t) : []), ...(r?.players.map(p => p.name) ?? [])].join('\n').toLowerCase()
+    return words.every(w => hay.includes(w))
+  })
+
   useEffect(() => {
-    if (!demos) return
-    const alive = new Set(demos.map(d => d.path))
+    if (!all) return
+    const alive = new Set(all.map(d => d.path))
     setPicked(p => {
       const next = new Set([...p].filter(x => alive.has(x)))
       return next.size === p.size ? p : next
     })
-  }, [demos])
+  }, [all])
 
   useEffect(() => {
     if (!menu) return
@@ -89,6 +97,7 @@ export function DemoList(props: {
   return (
     <>
       <div className={`list${many ? ' picking' : ''}`} role="list">
+        {words.length > 0 && demos.length === 0 && <div className="list-empty">{t('noMatches')}</div>}
         {demos.map(d => {
           const r = rosters[d.path]
           const src = r ? source(r.server, t) : ''

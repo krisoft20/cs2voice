@@ -204,6 +204,35 @@ button:focus-visible {
   background: var(--panel);
 }
 
+.icon-btn.on {
+  color: var(--text);
+  background: var(--panel);
+}
+
+.side-tools {
+  display: flex;
+  gap: 4px;
+}
+
+.side-search {
+  padding: 0 12px 10px 16px;
+}
+
+.side-search input {
+  width: 100%;
+  padding: 8px 10px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: var(--panel);
+  color: var(--text);
+  font: inherit;
+}
+
+.list-empty {
+  padding: 18px 22px;
+  color: var(--muted);
+}
+
 .side {
   display: flex;
   flex-direction: column;
@@ -895,6 +924,17 @@ button:focus-visible {
   color: var(--bad);
 }
 
+.notice.pet {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  color: var(--text);
+}
+
+.notice.pet span {
+  flex: 1;
+}
+
 .scroll {
   flex: 1;
   min-height: 0;
@@ -1444,7 +1484,7 @@ button:focus-visible {
 
 .players {
   display: grid;
-  grid-template-columns: 270px minmax(0, 1fr);
+  grid-template-columns: 300px minmax(0, 1fr);
   gap: 28px;
   align-items: start;
   padding: 4px 36px 0;
@@ -5579,4 +5619,23 @@ button:focus-visible {
 
 .ghost.danger {
   color: var(--bad);
+}
+
+.pl-who {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.pl-setup {
+  overflow: hidden;
+  color: var(--faint);
+  font-size: 12px;
+  line-height: 1.3;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.pl-setup span + span {
+  margin-left: 7px;
 }

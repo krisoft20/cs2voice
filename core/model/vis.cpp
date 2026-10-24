@@ -1,6 +1,7 @@
 #include "pch.h"
 
 #include <thread>
+#include <windows.h>
 
 #include "model/vis.h"
 
@@ -52,9 +53,11 @@ static void build_range(vis_t& v, const match_t& m, const map_geo_t& g, int from
 namespace vis {
 
 static std::atomic<int> g_threads = 0;
+static std::atomic<bool> g_idle = false;
 
-void set_threads(int n) {
+void set_threads(int n, bool idle) {
     g_threads = n < 0 ? 0 : n;
+    g_idle = idle;
 }
 
 bool smoked(const match_t& m, int tick, const fvec_t& a, const fvec_t& b) {
@@ -89,7 +92,11 @@ void build(vis_t& v, const match_t& m, const map_geo_t& g, int stride) {
         int to = std::min(v.ticks, from + per);
         if (from >= to)
             break;
-        threads.emplace_back(build_range, std::ref(v), std::cref(m), std::cref(g), from, to);
+        threads.emplace_back([&v, &m, &g, from, to] {
+            if (g_idle)
+                SetThreadPriority(GetCurrentThread(), THREAD_PRIORITY_IDLE);
+            build_range(v, m, g, from, to);
+        });
     }
     for (std::thread& t : threads)
         t.join();

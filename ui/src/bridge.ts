@@ -25,6 +25,11 @@ export type Stats = {
   utility_damage: number
   enemies_flashed: number
   flash_assists: number
+  ping?: number
+  flashes: number
+  enemy_blinds: number
+  enemy_blind_ms: number
+  team_blind_ms: number
   lines: [number, number, number, number, number][]
   eco?: [number, number, number, number, number][]
 }
@@ -37,6 +42,14 @@ export type PerfRow = {
   reaction_n: number
   placement: number | null
   placement_n: number
+  fps?: number
+  sens?: number
+  first: number
+  first_hits: number
+  stops: number
+  stopped: number
+  swings: number
+  swings_good: number
 }
 
 export type SkinItem = {
@@ -76,6 +89,7 @@ export type Roster = {
   partial: boolean
   ended?: boolean
   voice_known?: boolean
+  pet_crash?: boolean
   err: string
   map: string
   server: string
@@ -143,6 +157,7 @@ export type Incoming =
   | { type: 'cache_cleared' }
   | { type: 'window'; maximized: boolean }
   | { type: 'watch'; state: 'unpacking' | 'copied' | 'error'; err?: string; line?: string }
+  | { type: 'fixed'; path: string; out: string; ok: boolean; err: string }
 
 type Outgoing =
   | { type: 'ready' }
@@ -179,6 +194,7 @@ type Outgoing =
   | { type: 'copy_paths'; paths: string[] }
   | { type: 'watch'; path: string; low: number; high: number }
   | { type: 'set'; key: string; value: string }
+  | { type: 'fix_demo'; path: string }
 
 type SharedBufferEvent = { getBuffer: () => ArrayBuffer; additionalData: unknown }
 

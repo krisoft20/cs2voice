@@ -32,6 +32,8 @@ export const RefreshIcon = tabler(["M20 11a8.1 8.1 0 0 0 -15.5 -2m-.5 -4v4h4", "
 
 export const CloseIcon = tabler(["M18 6l-12 12", "M6 6l12 12"])
 
+export const SearchIcon = tabler(["M10 10m-7 0a7 7 0 1 0 14 0a7 7 0 1 0 -14 0", "M21 21l-6 -6"])
+
 export const ChevronLeftIcon = tabler(["M15 6l-6 6l6 6"])
 
 export const ChevronRightIcon = tabler(["M9 6l6 6l-6 6"])

@@ -4,20 +4,23 @@
 #include "bridge/perfs.h"
 #include "bridge/tracks.h"
 #include "dbg.h"
+#include "demos/finder.h"
 #include "demos/track.h"
+#include "game/weapons.h"
 #include "geo/map.h"
 #include "geo/vpk.h"
 #include "json/json.h"
 #include "model/match.h"
 #include "model/vis.h"
 #include "parser/parser.h"
+#include "perf/input.h"
 #include "perf/perf.h"
 #include "platform/window.h"
 #include "text.h"
 
 namespace perfs {
     const char* CACHE_FORMAT = "perfs 1";
-    const int DATA_VERSION = 1;
+    const int DATA_VERSION = 5;
 
     struct entry_t {
         int version = 0;
@@ -37,6 +40,8 @@ namespace perfs {
     bool g_want_track = false;
     bool g_pending = false;
     std::atomic<bool> g_cancel = false;
+    std::atomic<int> g_threads = 0;
+    std::atomic<bool> g_idle = false;
     std::deque<demo_file_t> g_back;
     bool g_current_open = false;
     std::string g_current;
@@ -209,18 +214,20 @@ namespace perfs {
             vis::build(*v, *m, *g, 4);
         uint64_t t3 = GetTickCount64();
         ok = g != nullptr;
+        std::string speed_err;
+        if (!weapons::load(finder::game_dir(), speed_err))
+            dbg::print("[perfs] no weapon speeds: %s", speed_err.c_str());
         out = "{\"type\":\"perf\",\"path\":\"" + json::escape(f.path) + "\",\"err\":\"" + json::escape(g ? "" : err) + "\",\"players\":[";
-        bool first = true;
-        for (const player_t& pl : m->players) {
+        std::vector<std::string> rows(m->players.size());
+        auto row_of = [&](size_t idx) {
+            const player_t& pl = m->players[idx];
             if (pl.slot < 0 || !pl.steamid)
-                continue;
+                return;
             perf_t pf;
             perf::measure(*m, g, g ? v : nullptr, pl.slot, pf);
             if (!pf.rounds)
-                continue;
-            if (!first)
-                out += ",";
-            first = false;
+                return;
+            std::string& out = rows[idx];
             out += "{\"steamid\":\"" + std::to_string(pl.steamid) + "\"";
             const std::vector<double>* lists[3] = {&pf.ttd_ms, &pf.reaction_ms, &pf.placement_deg};
             for (int i = 0; i < 3; i++) {
@@ -230,7 +237,38 @@ namespace perfs {
                 out += std::string(",\"") + perf::names[k] + "\":" + (pf.has[k] ? num : "null") + ",\"" + perf::names[k] +
                        "_n\":" + std::to_string(lists[i]->size());
             }
+            char setup[64];
+            snprintf(setup, sizeof(setup), ",\"fps\":%.0f,\"sens\":%.3f", input::fps(*m, pl.slot), input::sens(*m, pl.slot));
+            out += setup;
+            shots_t sh = input::shots(*m, pl.slot);
+            out += ",\"first\":" + std::to_string(sh.first) + ",\"first_hits\":" + std::to_string(sh.first_hits) + ",\"stops\":" + std::to_string(sh.stops) +
+                   ",\"stopped\":" + std::to_string(sh.stopped);
+            swings_t sw = input::swings(*m, pl.slot);
+            out += ",\"swings\":" + std::to_string(sw.close) + ",\"swings_good\":" + std::to_string(sw.good);
             out += "}";
+        };
+        std::atomic<size_t> next = 0;
+        unsigned n = g_threads ? (unsigned)g_threads : std::max(1u, std::thread::hardware_concurrency());
+        std::vector<std::thread> pool;
+        for (unsigned k = 0; k + 1 < n && k + 1 < rows.size(); k++)
+            pool.emplace_back([&] {
+                if (g_idle)
+                    SetThreadPriority(GetCurrentThread(), THREAD_PRIORITY_IDLE);
+                for (size_t i = next++; i < rows.size(); i = next++)
+                    row_of(i);
+            });
+        for (size_t i = next++; i < rows.size(); i = next++)
+            row_of(i);
+        for (std::thread& t : pool)
+            t.join();
+        bool first = true;
+        for (const std::string& r : rows) {
+            if (r.empty())
+                continue;
+            if (!first)
+                out += ",";
+            first = false;
+            out += r;
         }
         out += "]}";
         dbg::print("[perfs] %s in %llu ms (model%s %llu, geometry %llu, sight %llu)", f.name.c_str(), (unsigned long long)(GetTickCount64() - t0),
@@ -308,8 +346,10 @@ namespace perfs {
         }
     }
 
-    void set_threads(int n) {
-        vis::set_threads(n);
+    void set_threads(int n, bool idle) {
+        vis::set_threads(n, idle);
+        g_threads = n < 0 ? 0 : n;
+        g_idle = idle;
     }
 
     bool init(const std::wstring& cache_path) {

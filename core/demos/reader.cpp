@@ -1,6 +1,7 @@
 #include "pch.h"
 
 #include "dbg.h"
+#include "demos/basefix.h"
 #include "demos/reader.h"
 #include "demos/stats.h"
 #include "parser/entities/access.h"
@@ -54,6 +55,7 @@ namespace reader {
         int seen = -1;
         stats_t stats;
         skins_t skins;
+        late_t late;
     };
 
     void build(const parser_t& p, const state_t& s, roster_t& out);
@@ -150,8 +152,10 @@ namespace reader {
         state_t& s = *(state_t*)user;
         if (s.cancel && *s.cancel)
             p.stop = true;
-        if (!s.quick)
+        if (!s.quick) {
             stats::on_frame(s.stats, p);
+            basefix::watch_frame(s.late, p);
+        }
         if (!p.ready || p.tick - s.sampled < SAMPLE_TICKS)
             return;
         s.sampled = p.tick;
@@ -194,9 +198,11 @@ namespace reader {
     }
 
     void on_msg(parser_t& p, const msg_t& m, void* user) {
+        state_t& s = *(state_t*)user;
+        if (!s.quick && !s.scanning)
+            basefix::watch_msg(s.late, p, m);
         if (m.type != svc_voice_data)
             return;
-        state_t& s = *(state_t*)user;
         s.voice++;
         if (s.scanning)
             p.stop = true;
@@ -307,6 +313,7 @@ namespace reader {
             stats::finish(s->stats, *p);
             build(*p, *s, out);
             out.voice_known = !quick;
+            out.pet_crash = basefix::crashes(s->late);
         }
         if (!ok) {
             out.err = p->err;

@@ -62,6 +62,10 @@ const statsOf = (seed: number): Stats => {
     utility_damage: Math.round(r(20) * 200),
     enemies_flashed: Math.round(r(21) * 12),
     flash_assists: Math.round(r(22) * 2),
+    flashes: 4 + Math.round(r(23) * 12),
+    enemy_blinds: Math.round(r(24) * 14),
+    enemy_blind_ms: Math.round(r(25) * 30000),
+    team_blind_ms: Math.round(r(26) * 6000),
     lines: Array.from({ length: 18 }, (_, i) => [1, Math.round(r(30 + i) * 2.4), r(60 + i) > 0.45 ? 1 : 0, Math.round(r(90 + i) * 160), i < 12 ? 2 : 3]),
   }
 }

@@ -13,7 +13,10 @@ struct econ_item_t {
     bool star = false;
 };
 
+typedef void (*pair_fn_t)(const std::vector<std::string>& path, const std::string& key, const std::string& value);
+
 namespace econ {
+    void parse(const char* p, const char* end, pair_fn_t fn);
     bool load(const std::string& csgo_dir, const std::string& lang, std::string& err);
     bool item(int def, int paint, float wear, bool gloves, econ_item_t& out);
     bool sticker(uint32_t id, std::string& name, std::string& icon);

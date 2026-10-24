@@ -4,15 +4,15 @@ A Windows app for Counter-Strike 2 demos. It finds the demos on your PC, plays e
 
 ## Download
 
-Get `cs2voice.exe` from the [latest release](https://github.com/krisoft20/cs2voice/releases/latest). It is a single file, with no installer. Put it anywhere and run it.
+<a href="https://apps.microsoft.com/detail/9pdv2hrck9ws?mode=direct"><img src="https://get.microsoft.com/images/en-us%20dark.svg" width="200" alt="Get it from Microsoft Store"/></a>
 
-The exe is not code signed, so Windows SmartScreen may warn the first time. Click "More info", then "Run anyway".
+From the Microsoft Store it installs like any other app and the Store keeps it updated.
 
-cs2voice checks GitHub for a new version on start and offers to update itself. You can turn that off in Settings.
+Or get `cs2voice.exe` from the [latest release](https://github.com/krisoft20/cs2voice/releases/latest). It is a single file, with no installer. Put it anywhere and run it. The exe is not code signed, so Windows SmartScreen may warn the first time. Click "More info", then "Run anyway". This version checks GitHub for a new version on start and offers to update itself. You can turn that off in Settings.
 
 ### Only from here
 
-cs2voice is free and only comes from this repo. Anything else is fake, [report it](https://github.com/krisoft20/cs2voice/issues).
+cs2voice is free and only comes from this repo and its [Microsoft Store page](https://apps.microsoft.com/detail/9pdv2hrck9ws). Anything else is fake, [report it](https://github.com/krisoft20/cs2voice/issues).
 
 ## Requirements
 

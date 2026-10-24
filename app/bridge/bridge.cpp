@@ -18,6 +18,7 @@
 #include "bridge/watch.h"
 #include "dbg.h"
 #include "demos/finder.h"
+#include "demos/basefix.h"
 #include "json/json.h"
 #include "platform/files.h"
 #include "platform/setup.h"
@@ -487,6 +488,22 @@ namespace bridge {
         ShellExecuteW(window::handle(), L"open", text::wide(url).c_str(), nullptr, nullptr, SW_SHOWNORMAL);
     }
 
+    void fix_demo(const std::string& path) {
+        std::string out = path;
+        for (const char* ext : {".dem.zst", ".dem"})
+            if (out.size() > strlen(ext) && out.compare(out.size() - strlen(ext), strlen(ext), ext) == 0) {
+                out.resize(out.size() - strlen(ext));
+                break;
+            }
+        out += "-fixed.dem";
+        std::thread([path, out] {
+            std::string err;
+            bool ok = basefix::fix(path, out, err);
+            window::post_json("{\"type\":\"fixed\",\"path\":\"" + json::escape(path) + "\",\"out\":\"" + json::escape(out) + "\",\"ok\":" + (ok ? "true" : "false") +
+                              ",\"err\":\"" + json::escape(err) + "\"}");
+        }).detach();
+    }
+
     void reveal(const std::string& path) {
         std::wstring args = L"/select,\"" + text::wide(path) + L"\"";
         ShellExecuteW(window::handle(), L"open", L"explorer.exe", args.c_str(), nullptr, SW_SHOWNORMAL);
@@ -708,6 +725,9 @@ namespace bridge {
             update::install();
         } else if (type == "reveal") {
             reveal(json::str(json::at(j, "path")));
+        } else if (type == "fix_demo") {
+            if (const demo_file_t* f = file_of(json::str(json::at(j, "path"))))
+                fix_demo(f->path);
         } else {
             dbg::print("[bridge] unknown message %s", type.c_str());
         }
