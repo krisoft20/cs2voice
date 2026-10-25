@@ -6,6 +6,7 @@
 #include <wincrypt.h>
 
 #include "bridge/bridge.h"
+#include "bridge/faceit.h"
 #include "bridge/inventory.h"
 #include "bridge/jobs.h"
 #include "bridge/launch.h"
@@ -400,6 +401,14 @@ namespace bridge {
         ShellExecuteW(window::handle(), L"open", url.c_str(), nullptr, nullptr, SW_SHOWNORMAL);
     }
 
+    void open_faceit(const std::string& nick) {
+        const char* OK = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789-_.";
+        if (nick.empty() || nick.size() > 32 || nick.find_first_not_of(OK) != std::string::npos)
+            return;
+        std::wstring url = L"https://www.faceit.com/en/players/" + text::wide(nick);
+        ShellExecuteW(window::handle(), L"open", url.c_str(), nullptr, nullptr, SW_SHOWNORMAL);
+    }
+
     std::vector<std::string> strings(const json_t* list) {
         std::vector<std::string> out;
         if (list && list->kind == jk_arr)
@@ -518,6 +527,7 @@ namespace bridge {
             dbg::print("[bridge] folder %s", f.c_str());
         profiles::init(data_dir + L"\\profiles.txt", data_dir + L"\\avatars");
         profiles::set_online(g_steam);
+        faceit::init(data_dir + L"\\faceit.txt");
         if (!jobs::init(data_dir + L"\\cache.txt"))
             return false;
         maps::init(data_dir + L"\\maps");
@@ -569,6 +579,9 @@ namespace bridge {
             add_folder();
         } else if (type == "remove_folder") {
             remove_folder(json::str(json::at(j, "path")));
+        } else if (type == "faceit") {
+            if (const demo_file_t* f = file_of(json::str(json::at(j, "path"))); f && g_steam)
+                faceit::want(f->path, f->name);
         } else if (type == "profiles") {
             profiles::want(strings(json::at(j, "ids")), true);
         } else if (type == "set") {
@@ -676,6 +689,7 @@ namespace bridge {
             perfs::clear();
             tracks::clear();
             profiles::clear();
+            faceit::clear();
             maps::clear();
             inventory::clear();
             launch::clear();
@@ -712,6 +726,8 @@ namespace bridge {
             maps::ensure(json::str(json::at(j, "map")));
         } else if (type == "steam") {
             open_profile(json::str(json::at(j, "id")));
+        } else if (type == "faceit_profile") {
+            open_faceit(json::str(json::at(j, "nick")));
         } else if (type == "delete_demos") {
             delete_demos(known_paths(json::at(j, "paths")));
         } else if (type == "move_demos") {

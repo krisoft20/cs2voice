@@ -68,6 +68,12 @@ export const FlameIcon = tabler(["M12 10.941c2.333 -3.308 .167 -7.823 -1 -8.941c
 
 export const MicIcon = tabler(["M9 5a3 3 0 0 1 6 0v5a3 3 0 0 1 -6 0z", "M5 10a7 7 0 0 0 14 0", "M8 21l8 0", "M12 17l0 4"])
 
+export const MicOffIcon = tabler(["M3 3l18 18", "M9 5a3 3 0 0 1 6 0v5a3 3 0 0 1 -.13 .874m-2 2a3 3 0 0 1 -3.87 -2.872v-1", "M5 10a7 7 0 0 0 10.846 5.85m2 -2a6.967 6.967 0 0 0 1.152 -3.85", "M8 21l8 0", "M12 17l0 4"])
+
+export const LockIcon = tabler(["M5 13a2 2 0 0 1 2 -2h10a2 2 0 0 1 2 2v6a2 2 0 0 1 -2 2h-10a2 2 0 0 1 -2 -2v-6z", "M11 16a1 1 0 1 0 2 0a1 1 0 0 0 -2 0", "M8 11v-4a4 4 0 1 1 8 0v4"])
+
+export const UserMinusIcon = tabler(["M8 7a4 4 0 1 0 8 0a4 4 0 0 0 -8 0", "M6 21v-2a4 4 0 0 1 4 -4h4c.348 0 .686 .045 1.008 .128", "M16 19h6"])
+
 export const BombIcon = tabler(["M15.349 5.349l3.301 3.301a1.2 1.2 0 0 1 0 1.698l-.972 .972a7.5 7.5 0 1 1 -5 -5l.972 -.972a1.2 1.2 0 0 1 1.698 0z", "M17 7l1.5 -1.5", "M19 5l1 -1", "M8 12a3.5 3.5 0 0 1 3.5 -3.5"])
 
 export const UsersIcon = tabler(["M9 7m-4 0a4 4 0 1 0 8 0a4 4 0 1 0 -8 0", "M3 21v-2a4 4 0 0 1 4 -4h4a4 4 0 0 1 4 4v2", "M16 3.13a4 4 0 0 1 0 7.75", "M21 21v-2a4 4 0 0 0 -3 -3.85"])

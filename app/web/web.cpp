@@ -7,6 +7,7 @@
 #include "WebView2.h"
 #include "bridge/bridge.h"
 #include "dbg.h"
+#include "json/json.h"
 #include "platform/net.h"
 #include "text.h"
 #include "web/web.h"
@@ -30,6 +31,19 @@ namespace web {
     std::wstring g_page;
     const UINT_PTR SHOT_TIMER = 1;
     UINT g_shot_delay = 6000;
+
+    struct fetch_t {
+        std::wstring url;
+        page_fn_t done;
+    };
+
+    const UINT_PTR FETCH_TIMER = 2;
+    const UINT FETCH_TIMEOUT = 15000;
+    std::deque<fetch_t> g_fetches;
+    ICoreWebView2Controller* g_hidden_ctl = nullptr;
+    ICoreWebView2* g_hidden = nullptr;
+    bool g_hidden_starting = false;
+    bool g_fetching = false;
 
     void capture() {
         IStream* out = nullptr;
@@ -233,6 +247,105 @@ namespace web {
             g_hwnd, Callback<ICoreWebView2CreateCoreWebView2ControllerCompletedHandler>(on_controller).Get());
     }
 
+    void fetch_next();
+
+    void hidden_close() {
+        if (g_hidden)
+            g_hidden->Release();
+        if (g_hidden_ctl) {
+            g_hidden_ctl->Close();
+            g_hidden_ctl->Release();
+        }
+        g_hidden = nullptr;
+        g_hidden_ctl = nullptr;
+    }
+
+    void fetch_done(bool ok, const std::string& body) {
+        KillTimer(g_hwnd, FETCH_TIMER);
+        g_fetching = false;
+        if (g_fetches.empty())
+            return;
+        fetch_t f = std::move(g_fetches.front());
+        g_fetches.pop_front();
+        f.done(ok, body);
+        if (!g_fetching)
+            fetch_next();
+    }
+
+    void CALLBACK on_fetch_timer(HWND hwnd, UINT, UINT_PTR id, DWORD) {
+        KillTimer(hwnd, id);
+        dbg::print("[web] page fetch timed out");
+        fetch_done(false, "");
+    }
+
+    void fetch_next() {
+        if (g_fetches.empty()) {
+            hidden_close();
+            return;
+        }
+        if (!g_hidden)
+            return;
+        g_fetching = true;
+        SetTimer(g_hwnd, FETCH_TIMER, FETCH_TIMEOUT, on_fetch_timer);
+        g_hidden->Navigate(g_fetches.front().url.c_str());
+    }
+
+    void on_fetch_loaded() {
+        if (!g_fetching)
+            return;
+        g_hidden->ExecuteScript(L"document.body ? document.body.innerText : ''",
+                                Callback<ICoreWebView2ExecuteScriptCompletedHandler>([](HRESULT hr, LPCWSTR result) -> HRESULT {
+                                    json_t v;
+                                    std::string err;
+                                    if (FAILED(hr) || !result || !json::parse(text::utf8(result), v, err))
+                                        return S_OK;
+                                    std::string body = json::str(&v);
+                                    if (g_fetching && !body.empty() && body[0] == '{')
+                                        fetch_done(true, body);
+                                    return S_OK;
+                                }).Get());
+    }
+
+    HRESULT on_hidden_controller(HRESULT hr, ICoreWebView2Controller* ctl) {
+        g_hidden_starting = false;
+        if (FAILED(hr) || !ctl) {
+            dbg::print("[-] hidden webview failed 0x%08lx", hr);
+            while (!g_fetches.empty())
+                fetch_done(false, "");
+            return S_OK;
+        }
+        g_hidden_ctl = ctl;
+        g_hidden_ctl->AddRef();
+        g_hidden_ctl->put_IsVisible(FALSE);
+        g_hidden_ctl->get_CoreWebView2(&g_hidden);
+        EventRegistrationToken token;
+        g_hidden->add_NavigationCompleted(Callback<ICoreWebView2NavigationCompletedEventHandler>(
+                                              [](ICoreWebView2*, ICoreWebView2NavigationCompletedEventArgs*) -> HRESULT {
+                                                  on_fetch_loaded();
+                                                  return S_OK;
+                                              })
+                                              .Get(),
+                                          &token);
+        fetch_next();
+        return S_OK;
+    }
+
+    void fetch_page(const std::wstring& url, page_fn_t done) {
+        g_fetches.push_back({url, std::move(done)});
+        if (g_fetching || g_hidden_starting)
+            return;
+        if (g_hidden) {
+            fetch_next();
+            return;
+        }
+        if (!g_env) {
+            fetch_done(false, "");
+            return;
+        }
+        g_hidden_starting = true;
+        g_env->CreateCoreWebView2Controller(g_hwnd, Callback<ICoreWebView2CreateCoreWebView2ControllerCompletedHandler>(on_hidden_controller).Get());
+    }
+
     bool installed() {
         LPWSTR ver = nullptr;
         if (FAILED(GetAvailableCoreWebView2BrowserVersionString(nullptr, &ver)) || !ver)
@@ -288,6 +401,8 @@ namespace web {
     }
 
     void cleanup() {
+        g_fetches.clear();
+        hidden_close();
         if (g_view)
             g_view->Release();
         if (g_ctl) {

@@ -973,8 +973,8 @@ button:focus-visible {
 .board-cols {
   display: flex;
   align-items: baseline;
-  gap: 12px;
-  padding: 0 46px 4px 82px;
+  gap: 8px;
+  padding: 0 6px 4px 78px;
   color: var(--faint);
   font-size: 12px;
 }
@@ -983,8 +983,21 @@ button:focus-visible {
   flex: 1;
 }
 
+.col-fc,
+.fc {
+  width: 92px;
+  flex-shrink: 0;
+  text-align: left;
+}
+
+.fc {
+  display: flex;
+  align-items: center;
+  align-self: center;
+}
+
 .col-kda {
-  min-width: 78px;
+  min-width: 70px;
   text-align: center;
 }
 
@@ -1095,7 +1108,7 @@ button:focus-visible {
   display: grid;
   grid-template-columns: 20px 28px minmax(0, 1fr) auto;
   align-items: center;
-  gap: 12px;
+  gap: 10px;
   padding: 5px 4px 5px 10px;
   text-align: left;
 }
@@ -1115,25 +1128,38 @@ button:focus-visible {
   font: 600 14px/1 var(--display);
 }
 
-.profile {
+.avatar-link {
+  position: relative;
   display: grid;
-  place-items: center;
-  width: 30px;
-  height: 30px;
-  margin-right: 6px;
-  border-radius: 5px;
-  color: var(--muted);
-  opacity: 0;
+  cursor: pointer;
 }
 
-.channel:hover .profile,
-.profile:focus-visible {
+.avatar-link svg {
+  position: absolute;
+  inset: 0;
+  margin: auto;
+  width: 16px;
+  height: 16px;
+  padding: 6px;
+  box-sizing: content-box;
+  border-radius: 50%;
+  background: rgba(0, 0, 0, 0.6);
+  color: #fff;
+  opacity: 0;
+  transition: opacity 0.12s;
+}
+
+.avatar-link:hover svg {
   opacity: 1;
 }
 
-.profile:hover {
-  background: var(--raised);
-  color: var(--text);
+.fc-link {
+  display: flex;
+  border-radius: 9px;
+}
+
+.fc-link:hover {
+  filter: brightness(1.2);
 }
 
 .speaker {
@@ -1161,6 +1187,29 @@ button:focus-visible {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.meterline {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.meterline .meter {
+  flex: 1;
+  min-width: 0;
+}
+
+.meterline {
+  height: 4px;
+}
+
+.since {
+  flex-shrink: 0;
+  margin-left: auto;
+  color: var(--faint);
+  font: 500 11px/4px var(--ui);
 }
 
 .meter {
@@ -1266,15 +1315,15 @@ button:focus-visible {
 .line {
   display: flex;
   align-items: baseline;
-  gap: 12px;
-  padding: 6px 10px;
+  gap: 8px;
+  padding: 6px 6px;
   border-radius: 5px;
   font: 500 16px/1 var(--display);
   font-variant-numeric: tabular-nums;
 }
 
 .kda {
-  min-width: 78px;
+  min-width: 70px;
   text-align: center;
   color: var(--muted);
 }
@@ -1673,6 +1722,23 @@ button:focus-visible {
   min-width: 0;
 }
 
+.nickline .nick {
+  flex-shrink: 0;
+  max-width: 100%;
+}
+
+.nickline .badges {
+  flex-shrink: 1;
+  min-width: 0;
+  overflow: hidden;
+}
+
+.badges {
+  flex-shrink: 1;
+  min-width: 0;
+  overflow: hidden;
+}
+
 .badges {
   display: flex;
   gap: 4px;
@@ -1687,10 +1753,57 @@ button:focus-visible {
   font: 500 12px/1.3 var(--ui);
 }
 
-.badge.year {
-  background: none;
-  padding: 1px 0;
-  color: var(--faint);
+.badge.icon {
+  display: inline-flex;
+  align-items: center;
+  align-self: center;
+  padding: 2px 3px;
+}
+
+.badge.icon svg {
+  width: 13px;
+  height: 13px;
+}
+
+.faceit-level {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font: 600 12px/1 var(--ui);
+  color: var(--muted);
+}
+
+.faceit-level svg {
+  width: 18px;
+  height: 18px;
+  flex-shrink: 0;
+}
+
+.faceit-rank {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  height: 18px;
+  padding: 0 2px 0 6px;
+  border-radius: 9px;
+  font: 700 11px/18px 'Geist Sans', sans-serif;
+  color: #fff;
+}
+
+.faceit-rank.podium {
+  color: #060606;
+}
+
+.faceit-rank svg {
+  display: block;
+  width: 14px;
+  height: 14px;
+}
+
+.faceit-level text {
+  font: 700 8px 'Geist Sans', sans-serif;
+  letter-spacing: 0.02em;
+  fill: #f1f1f1;
 }
 
 .badge.bad {

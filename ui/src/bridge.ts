@@ -79,7 +79,9 @@ export type PerfMsg = { type: 'perf'; path: string; err: string; players: PerfRo
 
 export type Profile = { avatar: string; vac: boolean; limited: boolean; hidden: boolean; since: number }
 
-export type Player = { slot: number; name: string; crosshair?: string; steamid: string; team: number; voice: number; mute?: number; stats?: Stats }
+export type Player = { slot: number; name: string; crosshair?: string; steamid: string; team: number; voice: number; mute?: number; stats?: Stats; demoName?: string; level?: number; elo?: number; rank?: number }
+
+export type FaceitPlayer = { steamid: string; nick: string; level: number; elo: number; rank: number }
 
 export type Roster = {
   type: 'roster'
@@ -158,6 +160,7 @@ export type Incoming =
   | { type: 'window'; maximized: boolean }
   | { type: 'watch'; state: 'unpacking' | 'copied' | 'error'; err?: string; line?: string }
   | { type: 'fixed'; path: string; ok: boolean; err: string }
+  | { type: 'faceit'; path: string; players: FaceitPlayer[] }
 
 type Outgoing =
   | { type: 'ready' }
@@ -173,6 +176,7 @@ type Outgoing =
   | { type: 'reveal'; path: string }
   | { type: 'profiles'; ids: string[] }
   | { type: 'steam'; id: string }
+  | { type: 'faceit_profile'; nick: string }
   | { type: 'art'; map: string }
   | { type: 'voice'; path: string }
   | { type: 'track'; path: string }
@@ -195,6 +199,7 @@ type Outgoing =
   | { type: 'watch'; path: string; fix: boolean; low: number; high: number }
   | { type: 'set'; key: string; value: string }
   | { type: 'fix_demo'; path: string }
+  | { type: 'faceit'; path: string }
 
 type SharedBufferEvent = { getBuffer: () => ArrayBuffer; additionalData: unknown }
 

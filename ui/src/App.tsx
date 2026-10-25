@@ -1,8 +1,8 @@
-import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useId, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import type { ReactNode } from 'react'
-import { listen, send, type CleanupCfg, type SetupInfo, type Demo, type Folder, type Player, type Profile, type Roster, type Stats, type Storage, type PerfMsg, type PerfRow, type SkinsMsg, type SkinItem } from './bridge'
+import { listen, send, type CleanupCfg, type SetupInfo, type Demo, type FaceitPlayer, type Folder, type Player, type Profile, type Roster, type Stats, type Storage, type PerfMsg, type PerfRow, type SkinsMsg, type SkinItem } from './bridge'
 import { LANGS, gameLang, resolve, translator, type Key, type Lang, type LangChoice } from './i18n'
-import { BoltIcon, BombIcon, CalendarIcon, CheckIcon, ChevronDownIcon, ChevronLeftIcon, ChevronRightIcon, ClockIcon, CloseIcon, CloudIcon, CrownIcon, DemosIcon, DiskIcon, DoorIcon, FlameIcon, FolderIcon, FolderPlusIcon, HelpIcon, InfoIcon, LanguageIcon, LogoMark, MicIcon, MinusIcon, PaletteIcon, PlayIcon, PlusIcon, RefreshIcon, SearchIcon, SettingsIcon, ShieldIcon, Speaker, SteamIcon, SunIcon, TargetIcon, TradeIcon, UsersIcon, WallIcon } from './icons'
+import { BoltIcon, BombIcon, CalendarIcon, CheckIcon, ChevronDownIcon, ChevronLeftIcon, ChevronRightIcon, ClockIcon, CloseIcon, CloudIcon, CrownIcon, DemosIcon, DiskIcon, DoorIcon, FlameIcon, FolderIcon, FolderPlusIcon, HelpIcon, InfoIcon, LanguageIcon, LockIcon, LogoMark, MicIcon, MicOffIcon, MinusIcon, PaletteIcon, PlayIcon, PlusIcon, RefreshIcon, SearchIcon, SettingsIcon, ShieldIcon, Speaker, SteamIcon, SunIcon, TargetIcon, TradeIcon, UserMinusIcon, UsersIcon, WallIcon } from './icons'
 import { Avatar, UiContext, useUi, type Loader } from './common'
 import { decode, draw } from './crosshair'
 import { Check, CleanupCard, CleanupReview, CleanupSettings } from './Cleanup'
@@ -64,6 +64,7 @@ export default function App() {
   const [saved, setSaved] = useState('')
   const [watch, setWatch] = useState<{ state: string; err?: string } | null>(null)
   const [fixes, setFixes] = useState<Record<string, Fix>>({})
+  const [faceit, setFaceit] = useState<Record<string, FaceitPlayer[]>>({})
   const [search, setSearch] = useState<string | null>(null)
   const [storage, setStorage] = useState<Storage[]>([])
   const [cleanup, setCleanup] = useState<CleanupCfg>({ mode: 'ask', method: 'recycle', days: 7, copies: true, broken: true, mute: false, snooze: 0, skip: [] })
@@ -193,6 +194,7 @@ export default function App() {
         setWatch({ state: m.state, err: m.err })
         if (m.state === 'copied') setTimeout(() => setWatch(w => (w?.state === m.state ? null : w)), 2500)
       }
+      else if (m.type === 'faceit') setFaceit(f => ({ ...f, [m.path]: m.players }))
       else if (m.type === 'fixed') {
         setFixes(f => ({ ...f, [m.path]: m.ok ? { state: 'done' } : { state: 'error', err: m.err } }))
       }
@@ -248,7 +250,11 @@ export default function App() {
   useEffect(() => {
     if (cleanup.mode !== 'auto') autoDone.current = false
   }, [cleanup.mode])
-  const roster = selected ? rosters[selected] : undefined
+  const rawRoster = selected ? rosters[selected] : undefined
+  const roster = useMemo(() => withFaceit(rawRoster, selected ? faceit[selected] : undefined), [rawRoster, selected, faceit])
+  useEffect(() => {
+    if (selected && rawRoster?.ok && !faceit[selected]) send({ type: 'faceit', path: selected })
+  }, [selected, !!rawRoster?.ok])
   const pool = useMemo(() => {
     const out: Stats[] = []
     for (const r of Object.values(rosters))
@@ -701,6 +707,18 @@ function Rail(props: { page: Page; onPage: (p: Page) => void }) {
   )
 }
 
+const withFaceit = (r: Roster | undefined, fp: FaceitPlayer[] | undefined): Roster | undefined => {
+  if (!r || !fp?.length) return r
+  const by = new Map(fp.map(f => [f.steamid, f]))
+  return {
+    ...r,
+    players: r.players.map(p => {
+      const f = by.get(p.steamid)
+      return f ? { ...p, name: f.nick, demoName: f.nick !== p.name ? p.name : undefined, level: f.level, elo: f.elo, rank: f.rank } : p
+    }),
+  }
+}
+
 type Fix = { state: 'running' | 'done' | 'error'; err?: string }
 
 function DemoView(props: {
@@ -760,6 +778,7 @@ function DemoView(props: {
   const partial = !!roster?.partial
   const scored = !!roster && (!partial || !!roster.ended) && roster.rounds > 0
   const hasVoice = !partial && (roster?.voice ?? 0) > 0
+  const hasFaceit = !!roster?.players.some(p => (p.level ?? 0) > 0)
   const hasStats = !partial && !!roster?.players.some(p => p.stats && p.stats.rounds > 0)
   const hasDetails = hasStats && !roster?.stale && !!roster?.winners
   const voiceData = voice?.data
@@ -1049,6 +1068,7 @@ function DemoView(props: {
                   <span className="col-player">{t('colPlayerVoice')}</span>
                   {hasStats && (
                     <>
+                      {hasFaceit && <span className="col-fc">FACEIT</span>}
                       <span className="col-kda">K / D / A</span>
                       <span className="col-rt">{t('colRating')}</span>
                     </>
@@ -1062,16 +1082,38 @@ function DemoView(props: {
                       <li key={p.slot} className={`channel${on ? ' on' : ''}`}>
                         <button className="pick" onClick={() => toggle(p.slot)} aria-pressed={on}>
                           <Speaker on={on} />
-                          <Avatar url={avatars[p.steamid]} name={p.name} />
+                          <span
+                            className="avatar-link"
+                            role="link"
+                            title={t('steamProfile')}
+                            onClick={e => {
+                              e.stopPropagation()
+                              send({ type: 'steam', id: p.steamid })
+                            }}
+                          >
+                            <Avatar url={avatars[p.steamid]} name={p.name} />
+                            <SteamIcon />
+                          </span>
                           <span className="who">
                             <span className="nickline">
-                              <span className="nick">{p.name || t('slot', { n: p.slot })}</span>
+                              <span className="nick" title={p.demoName ? t('demoNick', { name: p.demoName }) : undefined}>{p.name || t('slot', { n: p.slot })}</span>
                               {mvp === p.slot && <span className="mvp-chip">{t('awardMvp')}</span>}
                               <Badges profile={profiles[p.steamid]} mute={p.mute} />
                             </span>
-                            {hasVoice && (
-                              <span className="meter">
-                                <span style={{ width: `${Math.max(level * 100, p.voice ? 3 : 0)}%` }} />
+                            {(hasVoice || (profiles[p.steamid]?.since ?? 0) > 0) && (
+                              <span className="meterline">
+                                {hasVoice ? (
+                                  <span className="meter">
+                                    <span style={{ width: `${Math.max(level * 100, p.voice ? 3 : 0)}%` }} />
+                                  </span>
+                                ) : (
+                                  <span />
+                                )}
+                                {(profiles[p.steamid]?.since ?? 0) > 0 && (
+                                  <span className="since" title={t('accountSince')}>
+                                    {profiles[p.steamid]?.since}
+                                  </span>
+                                )}
                               </span>
                             )}
                           </span>
@@ -1079,6 +1121,15 @@ function DemoView(props: {
                         </button>
                         {hasStats && p.stats && (
                           <span className="line">
+                            {hasFaceit && (
+                              <span className="fc">
+                                {(p.level ?? 0) > 0 && (
+                                  <button className="fc-link" onClick={() => send({ type: 'faceit_profile', nick: p.name })}>
+                                    <FaceitBadge level={p.level ?? 0} elo={p.elo ?? 0} rank={p.rank ?? 0} />
+                                  </button>
+                                )}
+                              </span>
+                            )}
                             <span className="kda">
                               {p.stats.kills}
                               <i>/</i>
@@ -1089,13 +1140,6 @@ function DemoView(props: {
                             <span className="rt" style={ratingTone(rating(p.stats))}>{fmt(rating(p.stats), 2, lang)}</span>
                           </span>
                         )}
-                        <button
-                          className="profile"
-                          onClick={() => send({ type: 'steam', id: p.steamid })}
-                          aria-label={t('steamProfile')}
-                        >
-                          <SteamIcon />
-                        </button>
                       </li>
                     )
                   })}
@@ -2201,6 +2245,69 @@ function Tile(props: { measure: Measure; stats: Stats; pool: Stats[] }) {
   )
 }
 
+const FACEIT_COLORS = ['transparent', '#f1f1f1', '#05ff00', '#05ff00', '#ffc700', '#ffc700', '#ffc700', '#ffc700', '#ff4b00', '#ff4b00', '#ef0000']
+const FACEIT_ARC = 'M 6.5 18.4 A 8.4 8.4 0 1 1 17.5 18.4'
+
+function FaceitLevel(props: { level: number; elo: number; title: string }) {
+  const id = 'fl' + useId().replace(/:/g, '')
+  const level = Math.min(10, props.level)
+  return (
+    <span className="faceit-level" title={props.title}>
+      <svg viewBox="0 0 24 24" aria-hidden="true">
+        <defs>
+          <radialGradient id={id} cx="0.5" cy="0.5" r="0.55">
+            <stop offset="0.4" stopColor="#5d5d5d" />
+            <stop offset="1" stopColor="#242424" />
+          </radialGradient>
+        </defs>
+        <circle cx="12" cy="12" r="12" fill="#121212" />
+        <path d={FACEIT_ARC} stroke={`url(#${id})`} strokeWidth="2.4" fill="none" />
+        <path
+          d={FACEIT_ARC}
+          stroke={FACEIT_COLORS[level]}
+          strokeWidth="2.4"
+          fill="none"
+          pathLength={10}
+          strokeDasharray="10.1 10000"
+          strokeDashoffset={level >= 10 ? 0 : 10 - 0.99 * level}
+        />
+        <text x="12" y="12.4" textAnchor="middle" dominantBaseline="central">
+          {level}
+        </text>
+      </svg>
+      {props.elo > 0 && <span className="elo">{props.elo}</span>}
+    </span>
+  )
+}
+
+const CHALLENGER_TOP = 1000
+const CHALLENGER_COLORS = ['#e80128', '#ffd336', '#def5ff', '#ff7236']
+
+function FaceitRank(props: { rank: number; elo: number; title: string }) {
+  const color = CHALLENGER_COLORS[props.rank <= 3 ? props.rank : 0]
+  return (
+    <span className="faceit-level" title={props.title}>
+      <span className={`faceit-rank${props.rank <= 3 ? ' podium' : ''}`} style={{ background: color }}>
+        #{props.rank}
+        <svg viewBox="0 0 24 24" aria-hidden="true">
+          <circle cx="12" cy="12" r="12" fill="#121212" />
+          <path d={FACEIT_ARC} stroke={color} strokeWidth="2.4" fill="none" />
+          <circle cx="12" cy="12" r="3.2" fill={color} />
+        </svg>
+      </span>
+      {props.elo > 0 && <span className="elo">{props.elo}</span>}
+    </span>
+  )
+}
+
+function FaceitBadge(props: { level: number; elo: number; rank: number }) {
+  const { t } = useUi()
+  const { level, elo, rank } = props
+  if (rank > 0 && rank <= CHALLENGER_TOP) return <FaceitRank rank={rank} elo={elo} title={t('faceitRank', { rank, elo })} />
+  if (level > 0) return <FaceitLevel level={level} elo={elo} title={t('faceitLevel', { level, elo })} />
+  return null
+}
+
 function Badges(props: { profile?: Profile; mute?: number }) {
   const { t } = useUi()
   const p = props.profile
@@ -2209,8 +2316,8 @@ function Badges(props: { profile?: Profile; mute?: number }) {
   return (
     <span className="badges">
       {mute > 0 && (
-        <span className="badge" title={t(mute & 2 ? 'muteAbuseTip' : 'muteTip')}>
-          {t('muteBadge')}
+        <span className="badge icon" title={t(mute & 2 ? 'muteAbuseTip' : 'muteTip')}>
+          <MicOffIcon />
         </span>
       )}
       {p?.vac && (
@@ -2219,18 +2326,13 @@ function Badges(props: { profile?: Profile; mute?: number }) {
         </span>
       )}
       {p?.limited && (
-        <span className="badge">
-          {t('limitedBadge')}
+        <span className="badge icon" title={t('limitedTip')}>
+          <UserMinusIcon />
         </span>
       )}
       {p?.hidden && (
-        <span className="badge">
-          {t('hiddenBadge')}
-        </span>
-      )}
-      {p && p.since > 0 && (
-        <span className="badge year">
-          {p.since}
+        <span className="badge icon" title={t('hiddenTip')}>
+          <LockIcon />
         </span>
       )}
     </span>
