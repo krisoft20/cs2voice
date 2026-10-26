@@ -36,7 +36,6 @@ namespace perfs {
     std::thread g_worker;
     std::atomic<bool> g_quit = false;
     demo_file_t g_want;
-    std::string g_want_map;
     bool g_want_track = false;
     bool g_pending = false;
     std::atomic<bool> g_cancel = false;
@@ -154,7 +153,7 @@ namespace perfs {
         return g_current_open;
     }
 
-    std::string measure(const demo_file_t& f, const std::string& hint, bool with_track, std::string& map, bool& ok) {
+    std::string measure(const demo_file_t& f, bool with_track, std::string& map, bool& ok) {
         std::string err, geo_err;
         match_t* m = new match_t();
         std::string out;
@@ -162,11 +161,10 @@ namespace perfs {
         uint64_t t0 = GetTickCount64();
         const map_geo_t* g = nullptr;
         std::thread early;
-        if (!hint.empty())
-            early = std::thread([&] { g = geometry(hint, geo_err); });
         parser_t* p = new parser_t();
         bool built = parser::open(*p, f.path.c_str());
         if (built) {
+            early = std::thread([&g, &geo_err, name = p->demo.info.map] { g = geometry(name, geo_err); });
             match_builder_t* mb = model::begin(*m, *p);
             track::state_t* ts = with_track ? track::begin(nullptr) : nullptr;
             fanout_t fo;
@@ -205,8 +203,6 @@ namespace perfs {
             return out;
         }
         map = m->map;
-        if (map != hint)
-            g = geometry(m->map, geo_err);
         err = geo_err;
         uint64_t t2 = GetTickCount64();
         vis_t* v = new vis_t();
@@ -281,7 +277,6 @@ namespace perfs {
     void work() {
         while (true) {
             demo_file_t f;
-            std::string hint;
             bool open = false, with_track = false, need_perf = true;
             {
                 std::unique_lock<std::mutex> lock(g_mu);
@@ -291,7 +286,6 @@ namespace perfs {
                     return;
                 if (g_pending) {
                     f = g_want;
-                    hint = g_want_map;
                     with_track = g_want_track;
                     g_pending = false;
                     open = true;
@@ -309,16 +303,9 @@ namespace perfs {
             std::string map, j;
             bool ok = false;
             if (need_perf || with_track) {
-                if (open)
-                    jobs::wait_urgent(g_quit);
-                std::string info, info_err;
-                json_t r;
-                bool stale = false;
-                if (hint.empty() && jobs::cached(f, info, stale) && json::parse(info, r, info_err))
-                    hint = json::str(json::at(r, "map"));
                 jobs::hold(true);
                 if (need_perf) {
-                    j = measure(f, hint, with_track, map, ok);
+                    j = measure(f, with_track, map, ok);
                 } else {
                     std::string blob, err;
                     bool track_ok = track::extract(f.path, blob, err, &g_cancel) && !g_cancel;
@@ -403,7 +390,7 @@ namespace perfs {
         g_cv.notify_all();
     }
 
-    void want(const demo_file_t& f, const std::string& map) {
+    void want(const demo_file_t& f) {
         {
             std::unique_lock<std::mutex> lock(g_mu);
             if (!g_current.empty() && !g_current_open && g_current != f.path)
@@ -423,7 +410,6 @@ namespace perfs {
             if (!g_current.empty())
                 g_cancel = true;
             g_want = f;
-            g_want_map = map;
             g_want_track = !tracks::stored(f);
             if (g_want_track)
                 tracks::expect(f);

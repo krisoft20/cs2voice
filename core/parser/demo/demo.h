@@ -45,6 +45,8 @@ struct demo_info_t {
     int32_t build = 0;
 };
 
+struct demo_unpack_t;
+
 struct demo_t {
     zstdx::buffer_t buf;
     const uint8_t* data = nullptr;
@@ -53,10 +55,7 @@ struct demo_t {
     void* file = nullptr;
     void* mapping = nullptr;
     const void* view = nullptr;
-    std::thread* unpacker = nullptr;
-    std::atomic<size_t> ready = 0;
-    std::atomic<bool> stop = false;
-    std::string unpack_err;
+    demo_unpack_t* unpack = nullptr;
     std::vector<uint8_t> unpacked;
     size_t size = 0;
     size_t first = 0;

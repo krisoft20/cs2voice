@@ -1,5 +1,7 @@
 #include "pch.h"
 
+#include <mutex>
+
 #include "parser/demo/demo.h"
 #include "parser/demo/snappy.h"
 #include "parser/demo/zstdx.h"
@@ -14,11 +16,30 @@
 #define ftell64 ftello
 #endif
 
+struct demo_unpack_t {
+    std::string key;
+    void* file = nullptr;
+    void* mapping = nullptr;
+    const void* view = nullptr;
+    const uint8_t* src = nullptr;
+    size_t src_size = 0;
+    zstdx::buffer_t buf;
+    size_t size = 0;
+    std::atomic<size_t> ready = 0;
+    std::atomic<bool> stop = false;
+    std::string err;
+    std::thread thread;
+    int users = 0;
+};
+
 namespace demo {
 
 const size_t ALL = SIZE_MAX;
 const size_t FAILED = SIZE_MAX - 1;
 const size_t OVERREAD = 16;
+
+static std::mutex g_unpack_mu;
+static std::vector<demo_unpack_t*> g_unpacks;
 
 #ifdef _WIN32
 static std::wstring widen(const char* path) {
@@ -113,54 +134,118 @@ static bool map_file(demo_t& d, const char* path) {
 #endif
 }
 
-static void unpack(demo_t* d) {
+static void unmap(void*& file, void*& mapping, const void*& view) {
+#ifdef _WIN32
+    if (view)
+        UnmapViewOfFile(view);
+    if (mapping)
+        CloseHandle((HANDLE)mapping);
+    if (file)
+        CloseHandle((HANDLE)file);
+#endif
+    view = nullptr;
+    mapping = nullptr;
+    file = nullptr;
+}
+
+static void unpack(demo_unpack_t* u) {
     size_t len = 0;
     std::string err;
-    bool ok = zstdx::decompress(d->src, d->src_size, d->buf, len, err, &d->ready, &d->stop);
+    bool ok = zstdx::decompress(u->src, u->src_size, u->buf, len, err, &u->ready, &u->stop);
     if (!ok)
-        d->unpack_err = err;
-    d->ready.store(ok ? ALL : FAILED);
-    d->ready.notify_all();
+        u->err = err;
+    u->ready.store(ok ? ALL : FAILED);
+    u->ready.notify_all();
+}
+
+static uint64_t stamp_of(void* file) {
+#ifdef _WIN32
+    FILETIME t = {};
+    if (GetFileTime((HANDLE)file, nullptr, nullptr, &t))
+        return ((uint64_t)t.dwHighDateTime << 32) | t.dwLowDateTime;
+#endif
+    return 0;
+}
+
+static void share(demo_t& d, const char* path, size_t total) {
+    std::string key = std::string(path) + "|" + std::to_string(d.src_size) + "|" + std::to_string(stamp_of(d.file));
+    std::lock_guard<std::mutex> lock(g_unpack_mu);
+    demo_unpack_t* u = nullptr;
+    for (demo_unpack_t* x : g_unpacks)
+        if (x->key == key)
+            u = x;
+    if (u) {
+        unmap(d.file, d.mapping, d.view);
+#ifdef _WIN32
+        int mine = GetThreadPriority(GetCurrentThread());
+        if (mine > GetThreadPriority(u->thread.native_handle()))
+            SetThreadPriority(u->thread.native_handle(), mine);
+#endif
+    } else {
+        u = new demo_unpack_t();
+        u->key = key;
+        u->file = d.file;
+        u->mapping = d.mapping;
+        u->view = d.view;
+        u->src = d.src;
+        u->src_size = d.src_size;
+        d.file = d.mapping = nullptr;
+        d.view = nullptr;
+        u->buf.resize(total + zstdx::SLACK);
+        u->size = total;
+        u->thread = std::thread(unpack, u);
+#ifdef _WIN32
+        SetThreadPriority(u->thread.native_handle(), GetThreadPriority(GetCurrentThread()));
+#endif
+        g_unpacks.push_back(u);
+    }
+    u->users++;
+    d.unpack = u;
+    d.src = u->src;
+    d.data = u->buf.data();
+    d.size = u->size;
+}
+
+static void release(demo_unpack_t* u) {
+    {
+        std::lock_guard<std::mutex> lock(g_unpack_mu);
+        if (--u->users > 0)
+            return;
+        g_unpacks.erase(std::find(g_unpacks.begin(), g_unpacks.end(), u));
+    }
+    u->stop = true;
+    u->thread.join();
+    unmap(u->file, u->mapping, u->view);
+    delete u;
 }
 
 static bool wait_for(demo_t& d, size_t need) {
+    if (!d.unpack)
+        return true;
     for (;;) {
-        size_t r = d.ready.load();
+        size_t r = d.unpack->ready.load();
         if (r == FAILED) {
-            d.err = "zstd: " + d.unpack_err;
+            d.err = "zstd: " + d.unpack->err;
             return false;
         }
         if (r >= need)
             return true;
-        d.ready.wait(r);
+        d.unpack->ready.wait(r);
     }
 }
 
 void close(demo_t& d) {
-    if (d.unpacker) {
-        d.stop = true;
-        d.unpacker->join();
-        delete d.unpacker;
-        d.unpacker = nullptr;
+    if (d.unpack) {
+        release(d.unpack);
+        d.unpack = nullptr;
     }
-#ifdef _WIN32
-    if (d.view)
-        UnmapViewOfFile(d.view);
-    if (d.mapping)
-        CloseHandle((HANDLE)d.mapping);
-    if (d.file)
-        CloseHandle((HANDLE)d.file);
-#endif
-    d.view = nullptr;
-    d.mapping = nullptr;
-    d.file = nullptr;
+    unmap(d.file, d.mapping, d.view);
     d.src = nullptr;
     d.data = d.buf.empty() ? nullptr : d.buf.data();
 }
 
 bool open(demo_t& d, const char* path) {
     d.err.clear();
-    d.ready = ALL;
     if (!map_file(d, path)) {
         if (!read_file(path, d.buf, d.size)) {
             d.err = std::string("cant read ") + path;
@@ -174,11 +259,7 @@ bool open(demo_t& d, const char* path) {
     if (zstdx::is_zstd(d.src, d.src_size)) {
         uint64_t total = d.view ? zstdx::content_size(d.src, d.src_size) : 0;
         if (total && total < (1ull << 34)) {
-            d.buf.resize((size_t)total + zstdx::SLACK);
-            d.data = d.buf.data();
-            d.size = (size_t)total;
-            d.ready = 0;
-            d.unpacker = new std::thread(unpack, &d);
+            share(d, path, (size_t)total);
         } else {
             zstdx::buffer_t out;
             size_t len = 0;

@@ -10,7 +10,39 @@ enum ev_type_t {
     ev_uint64 = 7,
 };
 
+enum ev_kind_t {
+    ek_other,
+    ek_begin_new_match,
+    ek_bomb_abortplant,
+    ek_bomb_beginplant,
+    ek_bomb_defused,
+    ek_bomb_exploded,
+    ek_bomb_planted,
+    ek_bullet_damage,
+    ek_decoy_detonate,
+    ek_decoy_started,
+    ek_flashbang_detonate,
+    ek_hegrenade_detonate,
+    ek_inferno_expire,
+    ek_inferno_startburn,
+    ek_player_blind,
+    ek_player_death,
+    ek_player_footstep,
+    ek_player_hurt,
+    ek_player_spawn,
+    ek_round_announce_match_start,
+    ek_round_end,
+    ek_round_freeze_end,
+    ek_round_officially_ended,
+    ek_round_prestart,
+    ek_smokegrenade_detonate,
+    ek_smokegrenade_expired,
+    ek_weapon_fire,
+    ek_weapon_reload,
+};
+
 struct ev_desc_t {
+    ev_kind_t kind = ek_other;
     std::string name;
     std::vector<std::string> keys;
     std::vector<int> types;

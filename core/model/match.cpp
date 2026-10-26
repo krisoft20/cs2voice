@@ -12,6 +12,11 @@
 #include "parser/proto/proto.h"
 #include "text.h"
 
+struct pawn_refs_t {
+    int layout = -1;
+    field_ref_t cell[3], vec[3], vel[3], eye, view_z, health, life, team, scoped, walking, ducked, fov, spotted;
+};
+
 struct match_builder_t {
     match_t* m = nullptr;
     const std::unordered_set<uint32_t>* steps = nullptr;
@@ -49,6 +54,7 @@ struct match_builder_t {
         access::key("m_pActionTrackingServices.m_matchStats.m_iEnemiesFlashed"), access::key("m_pActionTrackingServices.m_matchStats.m_iEnemy3Ks"),
         access::key("m_pActionTrackingServices.m_matchStats.m_iEnemy4Ks"),       access::key("m_pActionTrackingServices.m_matchStats.m_iEnemy5Ks")};
     int pawn_cls = -1;
+    pawn_refs_t pawn_refs;
     int rules_cls = -1;
     std::vector<std::pair<int, int>> offsets;
     std::vector<std::vector<uint64_t>> recent;
@@ -69,11 +75,6 @@ static bool get_flag(parser_t& p, field_key_t& k, const entity_t& e) {
 static int64_t get_int(parser_t& p, field_key_t& k, const entity_t& e, int64_t def) {
     const field_ref_t* r = access::ref(k, p.lay, p.ser, e);
     return r ? access::get_int(e, *r) : def;
-}
-
-static float get_float(parser_t& p, field_key_t& k, const entity_t& e) {
-    const field_ref_t* r = access::ref(k, p.lay, p.ser, e);
-    return r ? access::get_float(e, *r) : 0.f;
 }
 
 static bool round_live(parser_t& p, match_builder_t& b) {
@@ -97,40 +98,60 @@ static bool round_live(parser_t& p, match_builder_t& b) {
            get_int(p, b.win, *gr, 1) == 0;
 }
 
-static void fill_pawn(parser_t& p, match_builder_t& b, const entity_t& pe, pstate_t& s) {
+static void bind(parser_t& p, field_key_t& k, const entity_t& e, field_ref_t& out) {
+    const field_ref_t* r = access::ref(k, p.lay, p.ser, e);
+    out = r ? *r : field_ref_t{};
+}
+
+static void bind_pawn(parser_t& p, match_builder_t& b, const entity_t& pe) {
+    pawn_refs_t& r = b.pawn_refs;
+    r.layout = pe.layout;
     for (int i = 0; i < 3; i++) {
-        const field_ref_t* c = access::ref(b.cell[i], p.lay, p.ser, pe);
-        const field_ref_t* v = access::ref(b.vec[i], p.lay, p.ser, pe);
-        if (c && v)
-            s.pos[i] = (float)((double)access::get_u64(pe, *c) * 512.0 - 16384.0 + access::get_float(pe, *v));
-        s.vel[i] = get_float(p, b.vel[i], pe);
+        bind(p, b.cell[i], pe, r.cell[i]);
+        bind(p, b.vec[i], pe, r.vec[i]);
+        bind(p, b.vel[i], pe, r.vel[i]);
     }
-    const field_ref_t* eye = access::ref(b.eye, p.lay, p.ser, pe);
-    if (eye) {
-        float a[3];
-        if (access::get_vec3(pe, *eye, a)) {
-            s.pitch = a[0];
-            s.yaw = a[1];
-        }
+    bind(p, b.eye, pe, r.eye);
+    bind(p, b.view_z, pe, r.view_z);
+    bind(p, b.health, pe, r.health);
+    bind(p, b.life, pe, r.life);
+    bind(p, b.team, pe, r.team);
+    bind(p, b.scoped, pe, r.scoped);
+    bind(p, b.walking, pe, r.walking);
+    bind(p, b.ducked, pe, r.ducked);
+    bind(p, b.fov, pe, r.fov);
+    bind(p, b.spotted, pe, r.spotted);
+}
+
+static void fill_pawn(parser_t& p, match_builder_t& b, const entity_t& pe, pstate_t& s) {
+    if (b.pawn_refs.layout != pe.layout)
+        bind_pawn(p, b, pe);
+    const pawn_refs_t& r = b.pawn_refs;
+    for (int i = 0; i < 3; i++) {
+        if (r.cell[i].layout >= 0 && r.vec[i].layout >= 0)
+            s.pos[i] = (float)((double)access::get_u64(pe, r.cell[i]) * 512.0 - 16384.0 + access::get_float(pe, r.vec[i]));
+        s.vel[i] = access::get_float(pe, r.vel[i]);
     }
-    s.eye_z = get_float(p, b.view_z, pe);
-    s.health = (int16_t)get_int(p, b.health, pe, 0);
-    s.team = (uint8_t)get_int(p, b.team, pe, 0);
-    if (get_int(p, b.life, pe, 1) == 0 && s.health > 0)
+    float a[3];
+    if (access::get_vec3(pe, r.eye, a)) {
+        s.pitch = a[0];
+        s.yaw = a[1];
+    }
+    s.eye_z = access::get_float(pe, r.view_z);
+    s.health = (int16_t)access::get_int(pe, r.health);
+    s.team = (uint8_t)access::get_int(pe, r.team);
+    if (r.life.layout >= 0 && access::get_int(pe, r.life) == 0 && s.health > 0)
         s.flags |= pf_alive;
-    if (get_flag(p, b.scoped, pe))
+    if (access::get_bool(pe, r.scoped))
         s.flags |= pf_scoped;
-    if (get_int(p, b.fov, pe, 0) != 0)
+    if (access::get_int(pe, r.fov) != 0)
         s.flags |= pf_zoomed;
-    if (get_flag(p, b.walking, pe))
+    if (access::get_bool(pe, r.walking))
         s.flags |= pf_walking;
-    if (get_flag(p, b.ducked, pe))
+    if (access::get_bool(pe, r.ducked))
         s.flags |= pf_ducked;
-    const field_ref_t* sp = access::ref(b.spotted, p.lay, p.ser, pe);
-    if (sp) {
-        s.spotted[0] = (uint32_t)access::get_u64(pe, *sp, 0);
-        s.spotted[1] = (uint32_t)access::get_u64(pe, *sp, 1);
-    }
+    s.spotted[0] = (uint32_t)access::get_u64(pe, r.spotted, 0);
+    s.spotted[1] = (uint32_t)access::get_u64(pe, r.spotted, 1);
 }
 
 static void on_frame(parser_t& p, void* user) {
@@ -354,17 +375,23 @@ static void on_msg(parser_t& p, const msg_t& msg, void* user) {
 static void on_event(parser_t& p, const game_event_t& e, void* user) {
     match_builder_t& b = *(match_builder_t*)user;
     match_t& m = *b.m;
-    const std::string& name = e.desc->name;
     int tick = p.tick < 0 ? 0 : p.tick;
-    if ((name == "player_footstep" && !b.steps) || name == "weapon_fire" || name == "weapon_reload") {
+    switch (e.desc->kind) {
+    case ek_player_footstep:
+    case ek_weapon_fire:
+    case ek_weapon_reload: {
+        if (e.desc->kind == ek_player_footstep && b.steps)
+            break;
         int slot = model::slot_of_pawn(m, pawn_of(game_events::num(e, "userid_pawn", -1)), tick);
         if (slot < 0)
             return;
-        uint8_t kind = name == "player_footstep" ? sk_step : name == "weapon_fire" ? sk_fire : sk_reload;
+        uint8_t kind = e.desc->kind == ek_player_footstep ? sk_step : e.desc->kind == ek_weapon_fire ? sk_fire : sk_reload;
         m.sounds.push_back({tick, slot, kind});
         if (kind == sk_fire)
             m.shots.push_back({tick, slot, game_events::str(e, "weapon")});
-    } else if (name == "bullet_damage") {
+        break;
+    }
+    case ek_bullet_damage: {
         hit_t h;
         h.tick = tick;
         h.attacker = model::slot_of_pawn(m, pawn_of(game_events::num(e, "attacker_pawn", -1)), tick);
@@ -376,7 +403,9 @@ static void on_event(parser_t& p, const game_event_t& e, void* user) {
         h.distance = game_events::flt(e, "distance", 0.f);
         h.recoil = game_events::flt(e, "recoil_index", 0.f);
         m.hits.push_back(h);
-    } else if (name == "smokegrenade_detonate") {
+        break;
+    }
+    case ek_smokegrenade_detonate: {
         smoke_t sm;
         sm.start = tick;
         sm.end = 1 << 30;
@@ -385,14 +414,19 @@ static void on_event(parser_t& p, const game_event_t& e, void* user) {
         sm.y = game_events::flt(e, "y", 0.f);
         sm.z = game_events::flt(e, "z", 0.f);
         m.smokes.push_back(sm);
-    } else if (name == "smokegrenade_expired") {
+        break;
+    }
+    case ek_smokegrenade_expired: {
         int id = (int)game_events::num(e, "entityid", -1);
         for (smoke_t& sm : m.smokes)
             if (sm.entity == id && sm.end == 1 << 30)
                 sm.end = tick;
-    } else if (name == "player_blind") {
+        break;
+    }
+    case ek_player_blind:
         m.blinds.push_back({tick, (int)game_events::num(e, "userid", -1), game_events::flt(e, "blind_duration", 0.f)});
-    } else if (name == "player_hurt") {
+        break;
+    case ek_player_hurt: {
         hurt_t h;
         h.tick = tick;
         h.attacker = model::slot_of_pawn(m, pawn_of(game_events::num(e, "attacker_pawn", -1)), tick);
@@ -403,11 +437,15 @@ static void on_event(parser_t& p, const game_event_t& e, void* user) {
         h.hitgroup = (int)game_events::num(e, "hitgroup", 0);
         h.weapon = game_events::str(e, "weapon");
         m.hurts.push_back(h);
-    } else if (name == "begin_new_match") {
+        break;
+    }
+    case ek_begin_new_match:
         b.new_match.push_back(tick);
-    } else if (name == "round_end") {
+        break;
+    case ek_round_end:
         m.round_ends.push_back({tick, (int)game_events::num(e, "winner", 0), (int)game_events::num(e, "reason", 0)});
-    } else if (name == "player_death") {
+        break;
+    case ek_player_death: {
         death_t d;
         d.tick = tick;
         d.attacker = model::slot_of_pawn(m, pawn_of(game_events::num(e, "attacker_pawn", -1)), tick);
@@ -418,6 +456,10 @@ static void on_event(parser_t& p, const game_event_t& e, void* user) {
         d.penetrated = (int)game_events::num(e, "penetrated", 0);
         d.weapon = game_events::str(e, "weapon");
         m.deaths.push_back(d);
+        break;
+    }
+    default:
+        break;
     }
 }
 

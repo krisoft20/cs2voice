@@ -7,6 +7,7 @@
 #include "bridge/bridge.h"
 #include "bridge/jobs.h"
 #include "dbg.h"
+#include "demos/talk.h"
 #include "platform/setup.h"
 #include "platform/window.h"
 #include "text.h"
@@ -99,6 +100,25 @@ int WINAPI wWinMain(HINSTANCE inst, HINSTANCE, PWSTR, int) {
         dbg::cleanup();
         CoUninitialize();
         return rc;
+    }
+
+    std::wstring annotate = arg(L"--annotate");
+    if (!annotate.empty()) {
+        AttachConsole(ATTACH_PARENT_PROCESS);
+        FILE* con = nullptr;
+        freopen_s(&con, "CONOUT$", "w", stdout);
+        std::string err;
+        talk::opts_t opts;
+        opts.style = _wtoi(annotate.c_str());
+        bool ok = talk::annotate(text::utf8(arg(L"--in")), text::utf8(arg(L"--out")), opts, err);
+        if (ok)
+            printf("[annotate] ok\n");
+        else
+            printf("[annotate] %s\n", err.c_str());
+        dbg::print("[annotate] %s", ok ? "ok" : err.c_str());
+        dbg::cleanup();
+        CoUninitialize();
+        return ok ? 0 : 1;
     }
 
     std::wstring after = arg(L"--after-update");

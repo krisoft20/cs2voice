@@ -234,21 +234,27 @@ namespace stats {
     }
 
     void on_event(stats_t& s, parser_t& p, const game_event_t& e) {
-        const std::string& name = e.desc->name;
-        if (name == "player_hurt") {
+        switch (e.desc->kind) {
+        case ek_player_hurt:
             hurt(s, p, e);
-        } else if (name == "weapon_fire") {
+            break;
+        case ek_weapon_fire: {
             int slot = slot_of(e, "userid");
             if (s.live && own(s, e, slot, "userid_pawn") && is_gun(game_events::str(e, "weapon")))
                 s.pending.push_back({slot, false, false});
-        } else if (name == "player_death") {
+            break;
+        }
+        case ek_player_death:
             if (s.live)
                 death(s, p, e);
-        } else if (name == "flashbang_detonate") {
+            break;
+        case ek_flashbang_detonate: {
             int slot = slot_of(e, "userid");
             if (s.live && s.in_round && slot >= 0)
                 s.players[slot].flashes++;
-        } else if (name == "player_blind") {
+            break;
+        }
+        case ek_player_blind: {
             int victim = slot_of(e, "userid"), attacker = slot_of(e, "attacker");
             double sec = game_events::flt(e, "blind_duration", 0.f);
             if (s.live && s.in_round && victim >= 0 && attacker >= 0 && victim != attacker && sec > 0) {
@@ -262,23 +268,32 @@ namespace stats {
                     }
                 }
             }
-        } else if (name == "bomb_planted" || name == "bomb_defused" || name == "bomb_exploded") {
+            break;
+        }
+        case ek_bomb_planted:
+        case ek_bomb_defused:
+        case ek_bomb_exploded:
             if (s.live && s.in_round)
-                s.info.bomb.push_back({p.tick, slot_of(e, "userid"), name == "bomb_planted" ? 0 : name == "bomb_defused" ? 1 : 2});
-        } else if (name == "round_officially_ended") {
+                s.info.bomb.push_back({p.tick, slot_of(e, "userid"), e.desc->kind == ek_bomb_planted ? 0 : e.desc->kind == ek_bomb_defused ? 1 : 2});
+            break;
+        case ek_round_officially_ended:
             if (s.live && s.in_round)
                 s.winner = round_winner(s, p);
-        } else if (name == "player_spawn") {
+            break;
+        case ek_player_spawn: {
             int slot = slot_of(e, "userid");
             int pawn = pawn_of(e, "userid_pawn");
             if (slot >= 0)
                 s.owner[pawn] = slot;
             s.hp[pawn] = 100;
-        } else if (name == "round_freeze_end") {
+            break;
+        }
+        case ek_round_freeze_end:
             s.freeze_tick = p.tick;
             if (s.live)
                 start_round(s, p);
-        } else if (name == "round_announce_match_start") {
+            break;
+        case ek_round_announce_match_start:
             for (player_stats_t& ps : s.players)
                 ps = player_stats_t{};
             s.hits.clear();
@@ -288,6 +303,9 @@ namespace stats {
             s.live = true;
             if (s.freeze_tick == p.tick)
                 start_round(s, p);
+            break;
+        default:
+            break;
         }
     }
 

@@ -3,9 +3,9 @@ setlocal
 cd /d %~dp0
 set PRESET=%1
 if "%PRESET%"=="" set PRESET=debug
-for %%p in (debug release vs ui dist) do if "%PRESET%"=="%%p" goto known
+for %%p in (debug release vs ui dist check) do if "%PRESET%"=="%%p" goto known
 echo unknown command %PRESET%
-echo usage: build.cmd [debug ^| release ^| vs ^| ui ^| dist]
+echo usage: build.cmd [debug ^| release ^| vs ^| ui ^| dist ^| check]
 exit /b 1
 :known
 
@@ -30,6 +30,7 @@ if "%PRESET%"=="vs" (
     exit /b %errorlevel%
 )
 if "%PRESET%"=="dist" goto dist
+if "%PRESET%"=="check" goto check
 if not exist build\%PRESET%\build.ninja cmake --preset %PRESET%
 if errorlevel 1 exit /b 1
 cmake --build --preset %PRESET% %2 %3 %4
@@ -45,6 +46,13 @@ copy /y build\release\bin\Release\cs2voice.exe dist\cs2voice.exe >nul
 powershell -NoProfile -Command "(Get-FileHash dist\cs2voice.exe -Algorithm SHA256).Hash.ToLower() + '  cs2voice.exe' | Set-Content -NoNewline -Encoding ascii dist\cs2voice.exe.sha256"
 type dist\cs2voice.exe.sha256
 echo.
+exit /b %errorlevel%
+
+:check
+if not exist build\release\build.ninja cmake --preset release
+cmake --build --preset release --target checks bench
+if errorlevel 1 exit /b 1
+build\release\bin\Release\checks.exe %2 %3
 exit /b %errorlevel%
 
 :ui

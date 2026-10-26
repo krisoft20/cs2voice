@@ -40,6 +40,11 @@ export default function App() {
   const [version, setVersion] = useState('')
   const [updates, setUpdates] = useState(true)
   const [steam, setSteam] = useState(true)
+  const [talk, setTalk] = useState(false)
+  const [talkStyle, setTalkStyle] = useState(0)
+  const [talkLead, setTalkLead] = useState(13)
+  const [talkMin, setTalkMin] = useState(32)
+  const [talkRefresh, setTalkRefresh] = useState(192)
   const [update, setUpdate] = useState<{ version: string; notes: string; size: number; store: boolean } | null>(null)
   const [updating, setUpdating] = useState<{ state: 'idle' | 'downloading' | 'failed'; done: number; total: number; err: string }>({
     state: 'idle',
@@ -207,6 +212,11 @@ export default function App() {
         setVersion(m.version)
         setUpdates(m.updates)
         if (m.steam !== undefined) setSteam(m.steam)
+        if (m.talk !== undefined) setTalk(m.talk)
+        if (m.talkStyle !== undefined) setTalkStyle(m.talkStyle)
+        if (m.talkLead !== undefined) setTalkLead(m.talkLead)
+        if (m.talkMin !== undefined) setTalkMin(m.talkMin)
+        if (m.talkRefresh !== undefined) setTalkRefresh(m.talkRefresh)
         if (m.close === 'ask' || m.close === 'tray' || m.close === 'quit') setCloseMode(m.close)
         if (m.setup) setSetupInfo(m.setup)
         if (m.loader === 'plant' || m.loader === 'radar' || m.loader === 'rounds' || m.loader === 'ammo') setLoader(m.loader)
@@ -394,6 +404,31 @@ export default function App() {
             cat={settingsCat}
             version={version}
             steam={steam}
+            talk={talk}
+            onTalk={on => {
+              setTalk(on)
+              send({ type: 'set', key: 'talk', value: on ? '1' : '0' })
+            }}
+            talkStyle={talkStyle}
+            onTalkStyle={v => {
+              setTalkStyle(v)
+              send({ type: 'set', key: 'talk_style', value: String(v) })
+            }}
+            talkLead={talkLead}
+            onTalkLead={v => {
+              setTalkLead(v)
+              send({ type: 'set', key: 'talk_lead', value: String(v) })
+            }}
+            talkMin={talkMin}
+            onTalkMin={v => {
+              setTalkMin(v)
+              send({ type: 'set', key: 'talk_min', value: String(v) })
+            }}
+            talkRefresh={talkRefresh}
+            onTalkRefresh={v => {
+              setTalkRefresh(v)
+              send({ type: 'set', key: 'talk_refresh', value: String(v) })
+            }}
             onSteam={on => {
               setSteam(on)
               send({ type: 'set', key: 'steam', value: on ? '1' : '0' })
@@ -1192,6 +1227,39 @@ const size = (bytes: number, lang: string) => {
   return `${mb.toLocaleString(lang, { maximumFractionDigits: 1 })} MB`
 }
 
+function NumField(props: { label: string; value: number; onSet: (v: number) => void; def: number; step: number; min?: number; off?: boolean }) {
+  const shown = (props.value / 64).toFixed(2)
+  const put = (ticks: number) => {
+    if (Number.isFinite(ticks)) props.onSet(Math.max(props.min ?? 0, Math.round(ticks)))
+  }
+  const bump = (dir: number) => put(props.value + dir * props.step * 64)
+  return (
+    <label className="numfield">
+      <span>{props.label}</span>
+      <span className={`stepper${props.off ? ' off' : ''}`}>
+        <button type="button" disabled={props.off} onClick={() => bump(-1)} aria-label="less">
+          {'\u2212'}
+        </button>
+        <input
+          type="text"
+          inputMode="decimal"
+          disabled={props.off}
+          value={shown}
+          onChange={e => put(Number(e.target.value.replace(',', '.')) * 64)}
+        />
+        <button type="button" disabled={props.off} onClick={() => bump(1)} aria-label="more">
+          +
+        </button>
+      </span>
+      {props.value !== props.def && !props.off && (
+        <button type="button" className="reset" onClick={() => props.onSet(props.def)} aria-label="reset">
+          {'\u21ba'}
+        </button>
+      )}
+    </label>
+  )
+}
+
 type SettingsCat = 'general' | 'look' | 'demos' | 'storage' | 'about'
 
 function Settings(props: {
@@ -1201,6 +1269,16 @@ function Settings(props: {
   onUpdates: (on: boolean) => void
   steam: boolean
   onSteam: (on: boolean) => void
+  talk: boolean
+  onTalk: (on: boolean) => void
+  talkStyle: number
+  onTalkStyle: (v: number) => void
+  talkLead: number
+  onTalkLead: (v: number) => void
+  talkMin: number
+  onTalkMin: (v: number) => void
+  talkRefresh: number
+  onTalkRefresh: (v: number) => void
   cleanup: CleanupCfg
   plan: ReturnType<typeof planCleanup>
   onReview: () => void
@@ -1217,7 +1295,7 @@ function Settings(props: {
   onInstall: (desktop: boolean, autostart: boolean) => void
 }) {
   const { t, lang } = useUi()
-  const { version, updates, onUpdates, steam, onSteam, cleanup, plan, onReview, choice, onLang, folders, storage, loader, onLoader, closeMode, onCloseMode, setup, setupErr, onInstall } = props
+  const { version, talk, onTalk, talkStyle, onTalkStyle, talkLead, onTalkLead, talkMin, onTalkMin, talkRefresh, onTalkRefresh, updates, onUpdates, steam, onSteam, cleanup, plan, onReview, choice, onLang, folders, storage, loader, onLoader, closeMode, onCloseMode, setup, setupErr, onInstall } = props
   const closeModes: { id: CloseMode; name: Key }[] = [
     { id: 'ask', name: 'closeAskMode' },
     { id: 'tray', name: 'closeTray' },
@@ -1359,6 +1437,34 @@ function Settings(props: {
           </section>
           )}
           {cat === 'demos' && <CleanupSettings cfg={cleanup} folders={folders} plan={plan} onReview={onReview} />}
+          {cat === 'demos' && (
+          <section className="setting">
+            <div className="setting-head">
+              <h2>{t('talkTitle')}</h2>
+              <p>{t('talkText')}</p>
+            </div>
+            <div className="talk-opts">
+              <div className="talk-main">
+                <div className="choices" role="radiogroup" aria-label={t('talkTitle')}>
+                  <button role="radio" aria-checked={!talk} className={`choice${!talk ? ' on' : ''}`} onClick={() => onTalk(false)}>{t('off')}</button>
+                  <button role="radio" aria-checked={talk} className={`choice${talk ? ' on' : ''}`} onClick={() => onTalk(true)}>{t('on')}</button>
+                </div>
+                <div className="talk-row">
+                  <span>{t('talkStyle')}</span>
+                  <div className="choices" role="radiogroup" aria-label={t('talkStyle')}>
+                    <button role="radio" aria-checked={talkStyle === 0} disabled={!talk} className={`choice${talkStyle === 0 ? ' on' : ''}`} onClick={() => onTalkStyle(0)}>{'\u260a'}</button>
+                    <button role="radio" aria-checked={talkStyle === 1} disabled={!talk} className={`choice${talkStyle === 1 ? ' on' : ''}`} onClick={() => onTalkStyle(1)}>{t('talkWord')}</button>
+                  </div>
+                </div>
+              </div>
+              <div className="talk-times">
+                <NumField label={t('talkLead')} value={talkLead} onSet={onTalkLead} def={13} step={0.1} off={!talk} />
+                <NumField label={t('talkMin')} value={talkMin} onSet={onTalkMin} def={32} step={0.1} off={!talk} />
+                <NumField label={t('talkRefresh')} value={talkRefresh} onSet={onTalkRefresh} def={192} step={0.5} min={32} off={!talk} />
+              </div>
+            </div>
+          </section>
+          )}
           {cat === 'storage' && (
           <section className="setting">
             <div className="setting-head">
@@ -2289,11 +2395,6 @@ function FaceitRank(props: { rank: number; elo: number; title: string }) {
     <span className="faceit-level" title={props.title}>
       <span className={`faceit-rank${props.rank <= 3 ? ' podium' : ''}`} style={{ background: color }}>
         #{props.rank}
-        <svg viewBox="0 0 24 24" aria-hidden="true">
-          <circle cx="12" cy="12" r="12" fill="#121212" />
-          <path d={FACEIT_ARC} stroke={color} strokeWidth="2.4" fill="none" />
-          <circle cx="12" cy="12" r="3.2" fill={color} />
-        </svg>
       </span>
       {props.elo > 0 && <span className="elo">{props.elo}</span>}
     </span>

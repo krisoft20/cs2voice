@@ -82,6 +82,21 @@ uint32_t read_ubitvar_fp(bits_t& b) {
 }
 
 uint32_t read_varint(bits_t& b) {
+    if (b.bit + 40 <= b.len * 8) {
+        uint64_t word = load(b, b.bit >> 3) >> (b.bit & 7);
+        uint32_t v = 0;
+        for (int i = 0; i < 5; i++) {
+            uint32_t byte = (uint32_t)(word >> (i * 8)) & 0xff;
+            v |= (byte & 0x7f) << (i * 7);
+            if (!(byte & 0x80)) {
+                b.bit += (i + 1) * 8;
+                return v;
+            }
+        }
+        b.bit += 40;
+        b.bad = true;
+        return 0;
+    }
     uint32_t v = 0;
     for (int shift = 0; shift < 35; shift += 7) {
         uint32_t byte = read(b, 8);
@@ -154,7 +169,14 @@ bool read_bytes(bits_t& b, uint8_t* dst, size_t n) {
     if (!shift) {
         memcpy(dst, src, n);
     } else {
-        for (size_t i = 0; i < n; i++)
+        size_t i = 0;
+        for (; i + 8 < n; i += 8) {
+            uint64_t lo, hi = src[i + 8];
+            memcpy(&lo, src + i, 8);
+            uint64_t w = (lo >> shift) | (hi << (64 - shift));
+            memcpy(dst + i, &w, 8);
+        }
+        for (; i < n; i++)
             dst[i] = (uint8_t)((src[i] >> shift) | (src[i + 1] << (8 - shift)));
     }
     b.bit += n * 8;

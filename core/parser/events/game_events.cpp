@@ -5,6 +5,42 @@
 
 namespace game_events {
 
+static ev_kind_t kind_of(const std::string& name) {
+    static const std::pair<const char*, ev_kind_t> KINDS[] = {
+        {"begin_new_match", ek_begin_new_match},
+        {"bomb_abortplant", ek_bomb_abortplant},
+        {"bomb_beginplant", ek_bomb_beginplant},
+        {"bomb_defused", ek_bomb_defused},
+        {"bomb_exploded", ek_bomb_exploded},
+        {"bomb_planted", ek_bomb_planted},
+        {"bullet_damage", ek_bullet_damage},
+        {"decoy_detonate", ek_decoy_detonate},
+        {"decoy_started", ek_decoy_started},
+        {"flashbang_detonate", ek_flashbang_detonate},
+        {"hegrenade_detonate", ek_hegrenade_detonate},
+        {"inferno_expire", ek_inferno_expire},
+        {"inferno_startburn", ek_inferno_startburn},
+        {"player_blind", ek_player_blind},
+        {"player_death", ek_player_death},
+        {"player_footstep", ek_player_footstep},
+        {"player_hurt", ek_player_hurt},
+        {"player_spawn", ek_player_spawn},
+        {"round_announce_match_start", ek_round_announce_match_start},
+        {"round_end", ek_round_end},
+        {"round_freeze_end", ek_round_freeze_end},
+        {"round_officially_ended", ek_round_officially_ended},
+        {"round_prestart", ek_round_prestart},
+        {"smokegrenade_detonate", ek_smokegrenade_detonate},
+        {"smokegrenade_expired", ek_smokegrenade_expired},
+        {"weapon_fire", ek_weapon_fire},
+        {"weapon_reload", ek_weapon_reload},
+    };
+    for (const auto& [n, k] : KINDS)
+        if (name == n)
+            return k;
+    return ek_other;
+}
+
 bool load_list(game_events_t& ge, const uint8_t* msg, size_t n, std::string& err) {
     size_t added = 0;
     proto_t r = proto::make(msg, n);
@@ -40,6 +76,7 @@ bool load_list(game_events_t& ge, const uint8_t* msg, size_t n, std::string& err
             continue;
         if ((size_t)id >= ge.descs.size())
             ge.descs.resize(id + 1);
+        d.kind = kind_of(d.name);
         ge.descs[id] = std::move(d);
         added++;
     }

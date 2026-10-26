@@ -3,6 +3,7 @@
 #include "bridge/launch.h"
 #include "dbg.h"
 #include "demos/basefix.h"
+#include "demos/talk.h"
 #include "json/json.h"
 #include "parser/demo/zstdx.h"
 #include "platform/files.h"
@@ -16,9 +17,14 @@ namespace launch {
         uint32_t high = 0;
         bool fix = false;
         bool copy = true;
+        bool talk = false;
+        talk::opts_t opts;
+        std::vector<talk::talker_t> who;
     };
 
     const int KEEP = 3;
+    bool g_talk = false;
+    talk::opts_t g_opts;
 
     std::mutex g_mu;
     std::condition_variable g_cv;
@@ -28,6 +34,15 @@ namespace launch {
     job_t g_job;
     bool g_pending = false;
     bool g_clear = false;
+
+    void set_talk(bool on, int style, int lead, int min, int refresh) {
+        std::lock_guard<std::mutex> lock(g_mu);
+        g_talk = on;
+        g_opts.style = style;
+        g_opts.lead = lead;
+        g_opts.min = min;
+        g_opts.refresh = refresh;
+    }
 
     void post(const std::string& state, const std::string& extra) {
         window::post_json("{\"type\":\"watch\",\"state\":\"" + state + "\"" + extra + "}");
@@ -212,6 +227,30 @@ namespace launch {
             window::post_json("{\"type\":\"fixed\",\"path\":\"" + json::escape(j.file.path) + "\",\"ok\":true,\"err\":\"\"}");
             return;
         }
+        if (j.talk) {
+            const talk::opts_t& o = j.opts;
+            std::string talk_name = j.file.name.substr(0, lower.rfind(".dem")) + "-talk-" + std::to_string(o.style) + "-" + std::to_string(o.lead) + "-" + std::to_string(o.min) + "-" + std::to_string(o.refresh) + ".dem";
+            std::wstring dst = g_dir + L"\\" + text::wide(talk_name);
+            std::string talk_path = text::utf8(dst);
+            if (GetFileAttributesW(dst.c_str()) != INVALID_FILE_ATTRIBUTES) {
+                touch(talk_name);
+            } else {
+                post("talking", "");
+                std::string terr;
+                bool made = j.who.empty() ? talk::annotate(path, talk_path, o, terr) : talk::annotate(path, talk_path, j.who, o, terr);
+                if (made) {
+                    std::vector<std::string> index = read_index();
+                    index.push_back(talk_name + "\t" + j.file.path + "\t" + std::to_string((long long)time(nullptr)));
+                    write_index(index);
+                } else {
+                    dbg::print("[launch] talk: %s", terr.c_str());
+                }
+            }
+            if (GetFileAttributesW(dst.c_str()) != INVALID_FILE_ATTRIBUTES) {
+                path = talk_path;
+                trim(KEEP);
+            }
+        }
         std::replace(path.begin(), path.end(), '\\', '/');
         std::string line = "playdemo \"" + path + "\"";
         if (j.low || j.high) {
@@ -240,6 +279,8 @@ namespace launch {
                     continue;
                 }
                 j = g_job;
+                j.talk = g_talk;
+                j.opts = g_opts;
                 g_pending = false;
             }
             run(j);
@@ -271,10 +312,11 @@ namespace launch {
         g_cv.notify_all();
     }
 
-    void watch(const demo_file_t& f, uint32_t low, uint32_t high, bool fix) {
+    void watch(const demo_file_t& f, uint32_t low, uint32_t high, bool fix, const std::vector<talk::talker_t>& who) {
         {
             std::lock_guard<std::mutex> lock(g_mu);
             g_job = job_t{f, low, high, fix, true};
+            g_job.who = who;
             g_pending = true;
         }
         g_cv.notify_all();

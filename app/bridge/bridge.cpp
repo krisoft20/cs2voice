@@ -46,6 +46,11 @@ namespace bridge {
     bool g_cleanup_mute = false;
     int64_t g_snooze = 0;
     bool g_updates = true;
+    bool g_talk = false;
+    int g_talk_style = 0;
+    int g_talk_lead = 13;
+    int g_talk_min = 32;
+    int g_talk_refresh = 192;
     std::string g_close = "ask";
     bool g_steam = true;
 
@@ -57,6 +62,60 @@ namespace bridge {
         return out;
     }
 
+    enum set_key_t {
+        sk_none,
+        sk_lang,
+        sk_loader,
+        sk_cleanup,
+        sk_cleanup_method,
+        sk_cleanup_days,
+        sk_cleanup_copies,
+        sk_cleanup_broken,
+        sk_cleanup_mute,
+        sk_folder,
+        sk_keep,
+        sk_cleanup_skip,
+        sk_snooze,
+        sk_close,
+        sk_steam,
+        sk_autostart,
+        sk_desktop,
+        sk_updates,
+        sk_talk,
+        sk_talk_style,
+        sk_talk_lead,
+        sk_talk_min,
+        sk_talk_refresh,
+    };
+
+    set_key_t set_key(const std::string& s) {
+        static const std::unordered_map<std::string, set_key_t> keys = {
+            {"lang", sk_lang},
+            {"loader", sk_loader},
+            {"cleanup", sk_cleanup},
+            {"cleanup_method", sk_cleanup_method},
+            {"cleanup_days", sk_cleanup_days},
+            {"cleanup_copies", sk_cleanup_copies},
+            {"cleanup_broken", sk_cleanup_broken},
+            {"cleanup_mute", sk_cleanup_mute},
+            {"folder", sk_folder},
+            {"keep", sk_keep},
+            {"cleanup_skip", sk_cleanup_skip},
+            {"snooze", sk_snooze},
+            {"close", sk_close},
+            {"steam", sk_steam},
+            {"autostart", sk_autostart},
+            {"desktop", sk_desktop},
+            {"updates", sk_updates},
+            {"talk", sk_talk},
+            {"talk_style", sk_talk_style},
+            {"talk_lead", sk_talk_lead},
+            {"talk_min", sk_talk_min},
+            {"talk_refresh", sk_talk_refresh},
+        };
+        std::unordered_map<std::string, set_key_t>::const_iterator it = keys.find(s);
+        return it == keys.end() ? sk_none : it->second;
+    }
     void load_settings() {
         FILE* f = _wfopen(g_settings.c_str(), L"rb");
         if (!f)
@@ -65,36 +124,74 @@ namespace bridge {
         while (fgets(line, sizeof(line), f)) {
             std::string s = line;
             files::chomp(s);
-            if (s.rfind("folder=", 0) == 0)
-                g_custom.push_back(s.substr(7));
-            else if (s.rfind("lang=", 0) == 0)
-                g_lang = s.substr(5);
-            else if (s.rfind("loader=", 0) == 0)
-                g_loader = s.substr(7);
-            else if (s.rfind("keep=", 0) == 0)
-                g_keep.insert(s.substr(5));
-            else if (s.rfind("cleanup_skip=", 0) == 0)
-                g_skip.insert(s.substr(13));
-            else if (s.rfind("cleanup=", 0) == 0)
-                g_cleanup = s.substr(8);
-            else if (s.rfind("cleanup_method=", 0) == 0)
-                g_cleanup_method = s.substr(15);
-            else if (s.rfind("cleanup_days=", 0) == 0)
-                g_cleanup_days = std::clamp(atoi(s.c_str() + 13), 1, 365);
-            else if (s.rfind("cleanup_copies=", 0) == 0)
-                g_cleanup_copies = s.substr(15) == "1";
-            else if (s.rfind("cleanup_broken=", 0) == 0)
-                g_cleanup_broken = s.substr(15) == "1";
-            else if (s.rfind("cleanup_mute=", 0) == 0)
-                g_cleanup_mute = s.substr(13) == "1";
-            else if (s.rfind("snooze=", 0) == 0)
-                g_snooze = _atoi64(s.c_str() + 7);
-            else if (s.rfind("updates=", 0) == 0)
-                g_updates = s.substr(8) == "1";
-            else if (s.rfind("close=", 0) == 0)
-                g_close = s.substr(6);
-            else if (s.rfind("steam=", 0) == 0)
-                g_steam = s.substr(6) == "1";
+            size_t eq = s.find('=');
+            if (eq == std::string::npos)
+                continue;
+            std::string name = s.substr(0, eq), value = s.substr(eq + 1);
+            switch (set_key(name)) {
+            case sk_folder:
+                g_custom.push_back(value);
+                break;
+            case sk_keep:
+                g_keep.insert(value);
+                break;
+            case sk_cleanup_skip:
+                g_skip.insert(value);
+                break;
+            case sk_lang:
+                g_lang = value;
+                break;
+            case sk_loader:
+                g_loader = value;
+                break;
+            case sk_cleanup:
+                g_cleanup = value;
+                break;
+            case sk_cleanup_method:
+                g_cleanup_method = value;
+                break;
+            case sk_cleanup_days:
+                g_cleanup_days = std::clamp(atoi(value.c_str()), 1, 365);
+                break;
+            case sk_cleanup_copies:
+                g_cleanup_copies = value == "1";
+                break;
+            case sk_cleanup_broken:
+                g_cleanup_broken = value == "1";
+                break;
+            case sk_cleanup_mute:
+                g_cleanup_mute = value == "1";
+                break;
+            case sk_snooze:
+                g_snooze = _atoi64(value.c_str());
+                break;
+            case sk_close:
+                g_close = value;
+                break;
+            case sk_steam:
+                g_steam = value == "1";
+                break;
+            case sk_updates:
+                g_updates = value == "1";
+                break;
+            case sk_talk:
+                g_talk = value == "1";
+                break;
+            case sk_talk_style:
+                g_talk_style = std::clamp(atoi(value.c_str()), 0, 1);
+                break;
+            case sk_talk_lead:
+                g_talk_lead = std::clamp(atoi(value.c_str()), 0, 640);
+                break;
+            case sk_talk_min:
+                g_talk_min = std::clamp(atoi(value.c_str()), 0, 640);
+                break;
+            case sk_talk_refresh:
+                g_talk_refresh = std::clamp(atoi(value.c_str()), 32, 1920);
+                break;
+            default:
+                break;
+            }
         }
         fclose(f);
     }
@@ -130,6 +227,11 @@ namespace bridge {
         fprintf(f, "lang=%s\n", g_lang.c_str());
         fprintf(f, "loader=%s\n", g_loader.c_str());
         fprintf(f, "updates=%d\n", g_updates ? 1 : 0);
+        fprintf(f, "talk=%d\n", g_talk ? 1 : 0);
+        fprintf(f, "talk_style=%d\n", g_talk_style);
+        fprintf(f, "talk_lead=%d\n", g_talk_lead);
+        fprintf(f, "talk_min=%d\n", g_talk_min);
+        fprintf(f, "talk_refresh=%d\n", g_talk_refresh);
         fprintf(f, "close=%s\n", g_close.c_str());
         fprintf(f, "steam=%d\n", g_steam ? 1 : 0);
         for (const std::string& c : g_custom)
@@ -152,7 +254,7 @@ namespace bridge {
                            ",\"store\":" + (setup::packaged() ? "true" : "false") + ",\"desktop\":" + (st.desktop ? "true" : "false") + ",\"autostart\":" + (st.autostart ? "true" : "false") + ",\"dir\":\"" +
                            json::escape(text::utf8(st.dir)) + "\"}";
         web::post("{\"type\":\"settings\",\"version\":\"" CS2VOICE_VERSION "\",\"setup\":" + inst + ",\"lang\":\"" + json::escape(g_lang) + "\",\"loader\":\"" +
-                  json::escape(g_loader) + "\",\"updates\":" + (g_updates ? "true" : "false") + ",\"close\":\"" + json::escape(g_close) + "\",\"steam\":" + (g_steam ? "true" : "false") + ",\"cleanup\":{\"mode\":\"" + json::escape(g_cleanup) + "\",\"method\":\"" + json::escape(g_cleanup_method) +
+                  json::escape(g_loader) + "\",\"updates\":" + (g_updates ? "true" : "false") + ",\"talk\":" + (g_talk ? "true" : "false") + ",\"talkStyle\":" + std::to_string(g_talk_style) + ",\"talkLead\":" + std::to_string(g_talk_lead) + ",\"talkMin\":" + std::to_string(g_talk_min) + ",\"talkRefresh\":" + std::to_string(g_talk_refresh) + ",\"close\":\"" + json::escape(g_close) + "\",\"steam\":" + (g_steam ? "true" : "false") + ",\"cleanup\":{\"mode\":\"" + json::escape(g_cleanup) + "\",\"method\":\"" + json::escape(g_cleanup_method) +
                   "\",\"days\":" + std::to_string(g_cleanup_days) + ",\"copies\":" + (g_cleanup_copies ? "true" : "false") +
                   ",\"broken\":" + (g_cleanup_broken ? "true" : "false") + ",\"mute\":" + (g_cleanup_mute ? "true" : "false") +
                   ",\"snooze\":" + std::to_string(g_snooze) + ",\"skip\":[" + skip + "]}}");
@@ -239,14 +341,10 @@ namespace bridge {
             return;
         g_opened[path] = (int64_t)time(nullptr);
         save_opened();
-        std::string info, map;
+        std::string info;
         bool stale = false;
         bool full = false;
         bool have = jobs::cached(*f, info, stale, &full);
-        json_t r;
-        std::string err;
-        if (have && json::parse(info, r, err))
-            map = json::str(json::at(r, "map"));
         if (have)
             web::post(info);
         else
@@ -254,7 +352,7 @@ namespace bridge {
         if (!have || stale || !full)
             jobs::want(*f, true);
         voices::want(*f, false);
-        perfs::want(*f, map);
+        perfs::want(*f);
         tracks::want(*f, false);
     }
 
@@ -516,6 +614,7 @@ namespace bridge {
         g_settings = data_dir + L"\\settings.txt";
         g_opened_path = data_dir + L"\\opened.txt";
         load_settings();
+        launch::set_talk(g_talk, g_talk_style, g_talk_lead, g_talk_min, g_talk_refresh);
         if (g_close != "tray" && g_close != "quit")
             g_close = "ask";
         window::set_close(g_close);
@@ -550,6 +649,386 @@ namespace bridge {
         jobs::cleanup();
         profiles::cleanup();
     }
+    void cmd_ready(const json_t&) {
+        dbg::print("[bridge] ui ready");
+        send_settings();
+        if (g_updates)
+            update::check();
+        web::post("{\"type\":\"me\",\"steamid\":\"" + std::to_string(finder::current_user()) + "\"}");
+        send_folders();
+        rescan();
+        for (const std::string& src : launch::fixed_sources())
+            web::post("{\"type\":\"fixed\",\"path\":\"" + json::escape(src) + "\",\"ok\":true,\"err\":\"\"}");
+    }
+
+    void cmd_open(const json_t& j) {
+        open(json::str(json::at(j, "path")));
+    }
+
+    void cmd_copy(const json_t& j) {
+        copy(json::str(json::at(j, "text")));
+    }
+
+    void cmd_rescan(const json_t&) {
+        rescan();
+    }
+
+    void cmd_add_folder(const json_t&) {
+        add_folder();
+    }
+
+    void cmd_remove_folder(const json_t& j) {
+        remove_folder(json::str(json::at(j, "path")));
+    }
+
+    void cmd_faceit(const json_t& j) {
+        if (const demo_file_t* f = file_of(json::str(json::at(j, "path"))); f && g_steam)
+            faceit::want(f->path, f->name);
+    }
+
+    void cmd_profiles(const json_t& j) {
+        profiles::want(strings(json::at(j, "ids")), true);
+    }
+
+    void cmd_set(const json_t& j) {
+        std::string key = json::str(json::at(j, "key")), value = json::str(json::at(j, "value"));
+        bool save = false, talking = false;
+        switch (set_key(key)) {
+        case sk_lang:
+            if (value.empty() || value.size() > 8 || value.find_first_not_of("abcdefghijklmnopqrstuvwxyz") != std::string::npos)
+                return;
+            g_lang = value;
+            save = true;
+            break;
+        case sk_loader:
+            if (value != "plant" && value != "radar" && value != "rounds" && value != "ammo")
+                return;
+            g_loader = value;
+            save = true;
+            break;
+        case sk_cleanup:
+            if (value != "off" && value != "ask" && value != "auto")
+                return;
+            g_cleanup = value;
+            save = true;
+            break;
+        case sk_cleanup_method:
+            if (value != "recycle" && value != "delete")
+                return;
+            g_cleanup_method = value;
+            save = true;
+            break;
+        case sk_cleanup_days:
+            g_cleanup_days = std::clamp(atoi(value.c_str()), 1, 365);
+            save = true;
+            break;
+        case sk_cleanup_copies:
+            g_cleanup_copies = value == "1";
+            save = true;
+            break;
+        case sk_cleanup_broken:
+            g_cleanup_broken = value == "1";
+            save = true;
+            break;
+        case sk_cleanup_mute:
+            g_cleanup_mute = value == "1";
+            save = true;
+            break;
+        case sk_snooze:
+            g_snooze = _atoi64(value.c_str());
+            save = true;
+            break;
+        case sk_close:
+            if (value != "ask" && value != "tray" && value != "quit")
+                return;
+            g_close = value;
+            window::set_close(value);
+            save = true;
+            break;
+        case sk_steam:
+            g_steam = value == "1";
+            profiles::set_online(g_steam);
+            save = true;
+            break;
+        case sk_autostart:
+        case sk_desktop:
+            if (!setup::state().installed)
+                return;
+            if (set_key(key) == sk_autostart)
+                setup::set_autostart(value == "1");
+            else
+                setup::set_desktop(value == "1");
+            send_settings();
+            return;
+        case sk_updates:
+            g_updates = value == "1";
+            if (g_updates)
+                update::check();
+            save = true;
+            break;
+        case sk_talk:
+            g_talk = value == "1";
+            save = true;
+            talking = true;
+            break;
+        case sk_talk_style:
+            g_talk_style = std::clamp(atoi(value.c_str()), 0, 1);
+            save = true;
+            talking = true;
+            break;
+        case sk_talk_lead:
+            g_talk_lead = std::clamp(atoi(value.c_str()), 0, 640);
+            save = true;
+            talking = true;
+            break;
+        case sk_talk_min:
+            g_talk_min = std::clamp(atoi(value.c_str()), 0, 640);
+            save = true;
+            talking = true;
+            break;
+        case sk_talk_refresh:
+            g_talk_refresh = std::clamp(atoi(value.c_str()), 32, 1920);
+            save = true;
+            talking = true;
+            break;
+        default:
+            return;
+        }
+        if (talking)
+            launch::set_talk(g_talk, g_talk_style, g_talk_lead, g_talk_min, g_talk_refresh);
+        if (save) {
+            save_settings();
+            send_settings();
+        }
+    }
+
+    void cmd_cleanup_folder(const json_t& j) {
+        std::string path = json::str(json::at(j, "path"));
+        const json_t* flag = json::at(j, "on");
+        if (flag && flag->b)
+            g_skip.erase(path);
+        else
+            g_skip.insert(path);
+        save_settings();
+        send_settings();
+    }
+
+    void cmd_keep(const json_t& j) {
+        const json_t* flag = json::at(j, "on");
+        bool on = flag && flag->b;
+        for (const std::string& p : known_paths(json::at(j, "paths"))) {
+            if (on)
+                g_keep.insert(p);
+            else
+                g_keep.erase(p);
+        }
+        save_settings();
+        rescan();
+    }
+
+    void cmd_cleanup(const json_t& j) {
+        std::string method = json::str(json::at(j, "method"), g_cleanup_method);
+        delete_demos(known_paths(json::at(j, "paths")), method != "delete");
+    }
+
+    void cmd_open_url(const json_t& j) {
+        open_url(json::str(json::at(j, "url")));
+    }
+
+    void cmd_install(const json_t& j) {
+        std::string why;
+        const json_t* desk = json::at(j, "desktop");
+        const json_t* boot = json::at(j, "autostart");
+        if (!setup::install(desk && desk->b, why)) {
+            web::post("{\"type\":\"setup_error\",\"err\":\"" + json::escape(why) + "\"}");
+            return;
+        }
+        setup::set_autostart(boot && boot->b);
+        if (!setup::state().here && setup::start_installed())
+            window::command("quit");
+        else
+            send_settings();
+    }
+
+    void cmd_uninstall(const json_t& j) {
+        const json_t* wipe = json::at(j, "data");
+        setup::uninstall(wipe && wipe->b, g_data);
+        window::command("quit");
+    }
+
+    void cmd_tray_text(const json_t& j) {
+        window::set_menu(text::wide(json::str(json::at(j, "open"))), text::wide(json::str(json::at(j, "quit"))));
+    }
+
+    void cmd_win(const json_t& j) {
+        window::command(json::str(json::at(j, "action")));
+    }
+
+    void cmd_storage(const json_t&) {
+        send_storage();
+    }
+
+    void cmd_clear_unpacked(const json_t&) {
+        launch::clear();
+    }
+
+    void cmd_clear_cache(const json_t&) {
+        jobs::clear();
+        perfs::clear();
+        tracks::clear();
+        profiles::clear();
+        faceit::clear();
+        maps::clear();
+        inventory::clear();
+        launch::clear();
+        web::post("{\"type\":\"cache_cleared\"}");
+        rescan();
+        send_storage();
+    }
+
+    void cmd_watch(const json_t& j) {
+        std::string path = json::str(json::at(j, "path"));
+        const json_t* fix = json::at(j, "fix");
+        const demo_file_t* f = file_of(fixed_path(path));
+        bool repair = !f && fix && fix->kind == jk_bool && fix->b;
+        if (!f)
+            f = file_of(path);
+        if (!f)
+            return;
+        std::vector<talk::talker_t> who;
+        if (const demo_file_t* src = file_of(path); src && g_talk)
+            jobs::talkers(*src, who);
+        launch::watch(*f, (uint32_t)(int64_t)json::num(json::at(j, "low")), (uint32_t)(int64_t)json::num(json::at(j, "high")), repair, who);
+    }
+
+    void cmd_save_clip(const json_t& j) {
+        save_clip(json::str(json::at(j, "name")), json::str(json::at(j, "data")));
+    }
+
+    void cmd_track(const json_t& j) {
+        if (const demo_file_t* f = file_of(json::str(json::at(j, "path"))))
+            tracks::want(*f, true);
+    }
+
+    void cmd_radar(const json_t& j) {
+        maps::radar(json::str(json::at(j, "map")));
+    }
+
+    void cmd_icons(const json_t&) {
+        inventory::want_icons();
+    }
+
+    void cmd_econ_want(const json_t& j) {
+        inventory::icons(strings(json::at(j, "icons")));
+    }
+
+    void cmd_skins(const json_t& j) {
+        if (const demo_file_t* f = file_of(json::str(json::at(j, "path"))))
+            inventory::want(*f, json::str(json::at(j, "lang"), "en"));
+    }
+
+    void cmd_voice(const json_t& j) {
+        if (const demo_file_t* f = file_of(json::str(json::at(j, "path"))))
+            voices::want(*f, true);
+    }
+
+    void cmd_art(const json_t& j) {
+        maps::ensure(json::str(json::at(j, "map")));
+    }
+
+    void cmd_steam(const json_t& j) {
+        open_profile(json::str(json::at(j, "id")));
+    }
+
+    void cmd_faceit_profile(const json_t& j) {
+        open_faceit(json::str(json::at(j, "nick")));
+    }
+
+    void cmd_delete_demos(const json_t& j) {
+        delete_demos(known_paths(json::at(j, "paths")));
+    }
+
+    void cmd_move_demos(const json_t& j) {
+        move_demos(known_paths(json::at(j, "paths")));
+    }
+
+    void cmd_copy_paths(const json_t& j) {
+        std::string all;
+        for (const std::string& p : known_paths(json::at(j, "paths")))
+            all += (all.empty() ? "" : "\r\n") + p;
+        if (!all.empty())
+            copy(all);
+    }
+
+    void cmd_update_install(const json_t&) {
+        update::install();
+    }
+
+    void cmd_reveal(const json_t& j) {
+        reveal(json::str(json::at(j, "path")));
+    }
+
+    void cmd_fix_demo(const json_t& j) {
+        std::string path = json::str(json::at(j, "path"));
+        if (file_of(fixed_path(path)))
+            web::post("{\"type\":\"fixed\",\"path\":\"" + json::escape(path) + "\",\"ok\":true,\"err\":\"\"}");
+        else if (const demo_file_t* f = file_of(path))
+            launch::prepare_fix(*f);
+    }
+
+    typedef void (*cmd_fn_t)(const json_t&);
+
+    struct command_t {
+        const char* name;
+        cmd_fn_t run;
+    };
+
+    const command_t COMMANDS[] = {
+        {"ready", cmd_ready},
+        {"open", cmd_open},
+        {"copy", cmd_copy},
+        {"rescan", cmd_rescan},
+        {"add_folder", cmd_add_folder},
+        {"remove_folder", cmd_remove_folder},
+        {"faceit", cmd_faceit},
+        {"profiles", cmd_profiles},
+        {"set", cmd_set},
+        {"cleanup_folder", cmd_cleanup_folder},
+        {"keep", cmd_keep},
+        {"cleanup", cmd_cleanup},
+        {"open_url", cmd_open_url},
+        {"install", cmd_install},
+        {"uninstall", cmd_uninstall},
+        {"tray_text", cmd_tray_text},
+        {"win", cmd_win},
+        {"storage", cmd_storage},
+        {"clear_unpacked", cmd_clear_unpacked},
+        {"clear_cache", cmd_clear_cache},
+        {"watch", cmd_watch},
+        {"save_clip", cmd_save_clip},
+        {"track", cmd_track},
+        {"radar", cmd_radar},
+        {"icons", cmd_icons},
+        {"econ_want", cmd_econ_want},
+        {"skins", cmd_skins},
+        {"voice", cmd_voice},
+        {"art", cmd_art},
+        {"steam", cmd_steam},
+        {"faceit_profile", cmd_faceit_profile},
+        {"delete_demos", cmd_delete_demos},
+        {"move_demos", cmd_move_demos},
+        {"copy_paths", cmd_copy_paths},
+        {"update_install", cmd_update_install},
+        {"reveal", cmd_reveal},
+        {"fix_demo", cmd_fix_demo},
+    };
+
+    cmd_fn_t command_for(std::string_view name) {
+        for (const command_t& c : COMMANDS)
+            if (name == c.name)
+                return c.run;
+        return nullptr;
+    }
 
     void handle(const std::string& msg) {
         json_t j;
@@ -558,198 +1037,11 @@ namespace bridge {
             dbg::print("[bridge] bad message: %s", err.c_str());
             return;
         }
-        std::string type = json::str(json::at(j, "type"));
-        if (type == "ready") {
-            dbg::print("[bridge] ui ready");
-            send_settings();
-            if (g_updates)
-                update::check();
-            web::post("{\"type\":\"me\",\"steamid\":\"" + std::to_string(finder::current_user()) + "\"}");
-            send_folders();
-            rescan();
-            for (const std::string& src : launch::fixed_sources())
-                web::post("{\"type\":\"fixed\",\"path\":\"" + json::escape(src) + "\",\"ok\":true,\"err\":\"\"}");
-        } else if (type == "open") {
-            open(json::str(json::at(j, "path")));
-        } else if (type == "copy") {
-            copy(json::str(json::at(j, "text")));
-        } else if (type == "rescan") {
-            rescan();
-        } else if (type == "add_folder") {
-            add_folder();
-        } else if (type == "remove_folder") {
-            remove_folder(json::str(json::at(j, "path")));
-        } else if (type == "faceit") {
-            if (const demo_file_t* f = file_of(json::str(json::at(j, "path"))); f && g_steam)
-                faceit::want(f->path, f->name);
-        } else if (type == "profiles") {
-            profiles::want(strings(json::at(j, "ids")), true);
-        } else if (type == "set") {
-            std::string key = json::str(json::at(j, "key")), value = json::str(json::at(j, "value"));
-            if (key == "lang" && !value.empty() && value.size() <= 8 && value.find_first_not_of("abcdefghijklmnopqrstuvwxyz") == std::string::npos) {
-                g_lang = value;
-                save_settings();
-            } else if (key == "loader" && (value == "plant" || value == "radar" || value == "rounds" || value == "ammo")) {
-                g_loader = value;
-                save_settings();
-            } else if (key == "cleanup" && (value == "off" || value == "ask" || value == "auto")) {
-                g_cleanup = value;
-            } else if (key == "cleanup_method" && (value == "recycle" || value == "delete")) {
-                g_cleanup_method = value;
-            } else if (key == "cleanup_days") {
-                g_cleanup_days = std::clamp(atoi(value.c_str()), 1, 365);
-            } else if (key == "cleanup_copies") {
-                g_cleanup_copies = value == "1";
-            } else if (key == "cleanup_broken") {
-                g_cleanup_broken = value == "1";
-            } else if (key == "cleanup_mute") {
-                g_cleanup_mute = value == "1";
-            } else if (key == "snooze") {
-                g_snooze = _atoi64(value.c_str());
-            } else if (key == "close" && (value == "ask" || value == "tray" || value == "quit")) {
-                g_close = value;
-                window::set_close(value);
-            } else if (key == "steam") {
-                g_steam = value == "1";
-                profiles::set_online(g_steam);
-            } else if (key == "autostart" || key == "desktop") {
-                if (!setup::state().installed)
-                    return;
-                if (key == "autostart")
-                    setup::set_autostart(value == "1");
-                else
-                    setup::set_desktop(value == "1");
-                send_settings();
-                return;
-            } else if (key == "updates") {
-                g_updates = value == "1";
-                if (g_updates)
-                    update::check();
-            } else {
-                return;
-            }
-            if (key.rfind("cleanup", 0) == 0 || key == "snooze" || key == "updates" || key == "close" || key == "steam") {
-                save_settings();
-                send_settings();
-            }
-        } else if (type == "cleanup_folder") {
-            std::string path = json::str(json::at(j, "path"));
-            const json_t* flag = json::at(j, "on");
-            bool on = flag && flag->b;
-            if (on)
-                g_skip.erase(path);
-            else
-                g_skip.insert(path);
-            save_settings();
-            send_settings();
-        } else if (type == "keep") {
-            const json_t* flag = json::at(j, "on");
-            bool on = flag && flag->b;
-            for (const std::string& p : known_paths(json::at(j, "paths"))) {
-                if (on)
-                    g_keep.insert(p);
-                else
-                    g_keep.erase(p);
-            }
-            save_settings();
-            rescan();
-        } else if (type == "cleanup") {
-            std::string method = json::str(json::at(j, "method"), g_cleanup_method);
-            delete_demos(known_paths(json::at(j, "paths")), method != "delete");
-        } else if (type == "open_url") {
-            open_url(json::str(json::at(j, "url")));
-        } else if (type == "install") {
-            std::string why;
-            const json_t* desk = json::at(j, "desktop");
-            const json_t* boot = json::at(j, "autostart");
-            if (!setup::install(desk && desk->b, why)) {
-                web::post("{\"type\":\"setup_error\",\"err\":\"" + json::escape(why) + "\"}");
-                return;
-            }
-            setup::set_autostart(boot && boot->b);
-            if (!setup::state().here && setup::start_installed()) {
-                window::command("quit");
-            } else {
-                send_settings();
-            }
-        } else if (type == "uninstall") {
-            const json_t* wipe = json::at(j, "data");
-            setup::uninstall(wipe && wipe->b, g_data);
-            window::command("quit");
-        } else if (type == "tray_text") {
-            window::set_menu(text::wide(json::str(json::at(j, "open"))), text::wide(json::str(json::at(j, "quit"))));
-        } else if (type == "win") {
-            window::command(json::str(json::at(j, "action")));
-        } else if (type == "storage") {
-            send_storage();
-        } else if (type == "clear_unpacked") {
-            launch::clear();
-        } else if (type == "clear_cache") {
-            jobs::clear();
-            perfs::clear();
-            tracks::clear();
-            profiles::clear();
-            faceit::clear();
-            maps::clear();
-            inventory::clear();
-            launch::clear();
-            web::post("{\"type\":\"cache_cleared\"}");
-            rescan();
-            send_storage();
-        } else if (type == "watch") {
-            std::string path = json::str(json::at(j, "path"));
-            const json_t* fix = json::at(j, "fix");
-            const demo_file_t* f = file_of(fixed_path(path));
-            bool repair = !f && fix && fix->kind == jk_bool && fix->b;
-            if (!f)
-                f = file_of(path);
-            if (f)
-                launch::watch(*f, (uint32_t)(int64_t)json::num(json::at(j, "low")), (uint32_t)(int64_t)json::num(json::at(j, "high")), repair);
-        } else if (type == "save_clip") {
-            save_clip(json::str(json::at(j, "name")), json::str(json::at(j, "data")));
-        } else if (type == "track") {
-            if (const demo_file_t* f = file_of(json::str(json::at(j, "path"))))
-                tracks::want(*f, true);
-        } else if (type == "radar") {
-            maps::radar(json::str(json::at(j, "map")));
-        } else if (type == "icons") {
-            inventory::want_icons();
-        } else if (type == "econ_want") {
-            inventory::icons(strings(json::at(j, "icons")));
-        } else if (type == "skins") {
-            if (const demo_file_t* f = file_of(json::str(json::at(j, "path"))))
-                inventory::want(*f, json::str(json::at(j, "lang"), "en"));
-        } else if (type == "voice") {
-            if (const demo_file_t* f = file_of(json::str(json::at(j, "path"))))
-                voices::want(*f, true);
-        } else if (type == "art") {
-            maps::ensure(json::str(json::at(j, "map")));
-        } else if (type == "steam") {
-            open_profile(json::str(json::at(j, "id")));
-        } else if (type == "faceit_profile") {
-            open_faceit(json::str(json::at(j, "nick")));
-        } else if (type == "delete_demos") {
-            delete_demos(known_paths(json::at(j, "paths")));
-        } else if (type == "move_demos") {
-            move_demos(known_paths(json::at(j, "paths")));
-        } else if (type == "copy_paths") {
-            std::string all;
-            for (const std::string& p : known_paths(json::at(j, "paths")))
-                all += (all.empty() ? "" : "\r\n") + p;
-            if (!all.empty())
-                copy(all);
-        } else if (type == "update_install") {
-            update::install();
-        } else if (type == "reveal") {
-            reveal(json::str(json::at(j, "path")));
-        } else if (type == "fix_demo") {
-            std::string path = json::str(json::at(j, "path"));
-            if (file_of(fixed_path(path)))
-                web::post("{\"type\":\"fixed\",\"path\":\"" + json::escape(path) + "\",\"ok\":true,\"err\":\"\"}");
-            else if (const demo_file_t* f = file_of(path))
-                launch::prepare_fix(*f);
-        } else {
-            dbg::print("[bridge] unknown message %s", type.c_str());
-        }
+        std::string_view type = json::view(json::at(j, "type"));
+        cmd_fn_t run = command_for(type);
+        if (run)
+            run(j);
+        else
+            dbg::print("[bridge] unknown message %.*s", (int)type.size(), type.data());
     }
 }

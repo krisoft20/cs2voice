@@ -309,6 +309,7 @@ namespace jobs {
                 me.quick = quick;
                 me.cancel = false;
             }
+            SetThreadPriority(GetCurrentThread(), urgent ? THREAD_PRIORITY_NORMAL : THREAD_PRIORITY_BELOW_NORMAL);
             roster_t r;
             if (quick) {
                 uint64_t t0 = GetTickCount64();
@@ -433,6 +434,7 @@ namespace jobs {
                     if (g_workers[i].current == f.path && !g_workers[i].quick) {
                         reading = true;
                         g_workers[i].urgent = true;
+                        SetThreadPriority(g_workers[i].thread.native_handle(), THREAD_PRIORITY_NORMAL);
                     }
                     idle = idle || g_workers[i].current.empty();
                 }
@@ -460,18 +462,6 @@ namespace jobs {
         return !game_running();
     }
 
-    void wait_urgent(const std::atomic<bool>& quit) {
-        std::unique_lock<std::mutex> lock(g_mu);
-        while (!g_quit && !quit) {
-            bool urgent = !g_queue.empty() && g_queue.front().path == g_urgent;
-            for (int i = 0; i < g_count; i++)
-                urgent = urgent || g_workers[i].urgent;
-            if (!urgent)
-                return;
-            g_cv.wait_for(lock, std::chrono::milliseconds(100));
-        }
-    }
-
     void hold(bool on) {
         {
             std::lock_guard<std::mutex> lock(g_mu);
@@ -494,5 +484,44 @@ namespace jobs {
             *full = is_full(it->second);
         json = stale ? "{\"stale\":true," + it->second.json.substr(1) : it->second.json;
         return true;
+    }
+
+    bool talkers(const demo_file_t& f, std::vector<talk::talker_t>& out) {
+        std::string info, err;
+        bool stale = false;
+        json_t j;
+        if (!cached(f, info, stale) || stale || !json::parse(info, j, err))
+            return false;
+        roster_t r;
+        if (const json_t* rounds = json::at(j, "round_info"); rounds && rounds->kind == jk_arr)
+            for (const json_t& x : rounds->arr) {
+                round_info_t ri;
+                ri.start = (int)json::num(json::at(x, "start"));
+                r.rounds_info.push_back(ri);
+            }
+        const json_t* players = json::at(j, "players");
+        if (!players || players->kind != jk_arr)
+            return false;
+        for (const json_t& x : players->arr) {
+            roster_player_t p;
+            p.slot = (int)json::num(json::at(x, "slot"), -1);
+            p.name = json::str(json::at(x, "name"));
+            p.steamid = _strtoui64(json::str(json::at(x, "steamid")).c_str(), nullptr, 10);
+            p.team = (int)json::num(json::at(x, "team"), -1);
+            const json_t* st = json::at(x, "stats");
+            const json_t* lines = st ? json::at(*st, "lines") : nullptr;
+            if (lines && lines->kind == jk_arr)
+                for (const json_t& l : lines->arr) {
+                    round_line_t line;
+                    if (l.kind == jk_arr && l.arr.size() >= 5) {
+                        line.in = l.arr[0].num != 0;
+                        line.side = (int)l.arr[4].num;
+                    }
+                    p.stats.lines.push_back(line);
+                }
+            r.players.push_back(p);
+        }
+        out = talk::talkers(r);
+        return !out.empty();
     }
 }

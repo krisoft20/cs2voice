@@ -5,8 +5,6 @@
 #include "parser/proto/proto.h"
 
 namespace voice {
-    const uint32_t MAGIC = 0x56325343;
-    const uint32_t VERSION = 1;
     const int OPUS = 2;
 
     struct packet_t {
@@ -35,7 +33,10 @@ namespace voice {
         std::vector<size_t> offsets;
         std::vector<round_t> rounds;
         std::vector<kill_t> kills;
+        float tick_interval = 0.f;
+        int ticks = 0;
         bool live = false;
+        bool audio = true;
         const std::atomic<bool>* cancel = nullptr;
     };
 
@@ -77,25 +78,30 @@ namespace voice {
         }
         if (!xuid || format != OPUS || !data || !len || len > 0xffff)
             return;
-        s.offsets.push_back(s.bytes.size());
-        s.bytes.insert(s.bytes.end(), data, data + len);
+        if (s.audio) {
+            s.offsets.push_back(s.bytes.size());
+            s.bytes.insert(s.bytes.end(), data, data + len);
+        }
         s.packets.push_back({speaker_of(s, xuid), p.tick, len});
     }
 
     void on_event(parser_t& p, const game_event_t& e, void* user) {
         state_t& s = *(state_t*)user;
-        const std::string& name = e.desc->name;
-        if (name == "round_prestart") {
+        switch (e.desc->kind) {
+        case ek_round_prestart:
             if (!s.rounds.empty() && s.rounds.back().end < 0)
                 s.rounds.back().end = p.tick;
             s.rounds.push_back({p.tick});
-        } else if (name == "round_freeze_end") {
+            break;
+        case ek_round_freeze_end:
             if (!s.rounds.empty() && s.rounds.back().live < 0)
                 s.rounds.back().live = p.tick;
-        } else if (name == "round_officially_ended") {
+            break;
+        case ek_round_officially_ended:
             if (!s.rounds.empty() && s.rounds.back().end < 0)
                 s.rounds.back().end = p.tick;
-        } else if (name == "round_announce_match_start") {
+            break;
+        case ek_round_announce_match_start: {
             s.live = true;
             s.kills.clear();
             std::vector<round_t> open;
@@ -103,9 +109,15 @@ namespace voice {
                 if (r.end < 0)
                     open.push_back(r);
             s.rounds = open;
-        } else if (name == "player_death" && s.live) {
-            s.kills.push_back({p.tick, (int)game_events::num(e, "attacker", -1), (int)game_events::num(e, "userid", -1),
-                               game_events::num(e, "headshot", 0) != 0});
+            break;
+        }
+        case ek_player_death:
+            if (s.live)
+                s.kills.push_back({p.tick, (int)game_events::num(e, "attacker", -1), (int)game_events::num(e, "userid", -1),
+                                   game_events::num(e, "headshot", 0) != 0});
+            break;
+        default:
+            break;
         }
     }
 
@@ -113,7 +125,7 @@ namespace voice {
         out.append((const char*)&v, 4);
     }
 
-    bool extract(const std::string& demo, std::string& blob, std::string& err, const std::atomic<bool>* cancel) {
+    bool collect(const std::string& demo, state_t& s, std::string& err, const std::atomic<bool>* cancel) {
         parser_t* p = new parser_t();
         if (!parser::open(*p, demo.c_str())) {
             err = p->err;
@@ -122,29 +134,64 @@ namespace voice {
             return false;
         }
         p->skip_entities = true;
-        state_t* s = new state_t();
-        s->cancel = cancel;
+        s.cancel = cancel;
         callbacks_t cb;
-        cb.user = s;
+        cb.user = &s;
         cb.on_msg = on_msg;
         cb.on_event = on_event;
-        bool ok = parser::run(*p, cb) || !s->packets.empty();
+        bool ok = parser::run(*p, cb) || !s.packets.empty();
         if (cancel && *cancel)
             ok = false;
-        if (!s->rounds.empty() && s->rounds.back().end < 0)
-            s->rounds.back().end = p->tick;
+        if (!s.rounds.empty() && s.rounds.back().end < 0)
+            s.rounds.back().end = p->tick;
+        s.tick_interval = p->tick_interval;
+        s.ticks = p->tick;
+        if (!ok && err.empty())
+            err = p->err.empty() ? "cancelled" : p->err;
+        demo::close(p->demo);
+        delete p;
+        return ok;
+    }
 
-        std::string head = "{\"tick_interval\":" + std::to_string(p->tick_interval) + ",\"ticks\":" + std::to_string(p->tick) + ",\"speakers\":[";
-        for (size_t i = 0; i < s->speakers.size(); i++)
-            head += (i ? ",\"" : "\"") + std::to_string(s->speakers[i]) + "\"";
+    bool spurts(const std::string& demo, int gap, std::vector<spurt_t>& out, std::vector<round_mark_t>& rounds, std::string& err,
+                const std::atomic<bool>* cancel) {
+        state_t s;
+        s.audio = false;
+        if (!collect(demo, s, err, cancel))
+            return false;
+        for (const round_t& r : s.rounds)
+            rounds.push_back({r.start, r.live});
+        int cur = -1, start = 0, last = 0;
+        for (const packet_t& p : s.packets) {
+            if (p.speaker != cur || p.tick - last > gap) {
+                if (cur >= 0)
+                    out.push_back({s.speakers[cur], start, last});
+                cur = p.speaker;
+                start = p.tick;
+            }
+            last = p.tick;
+        }
+        if (cur >= 0)
+            out.push_back({s.speakers[cur], start, last});
+        return true;
+    }
+
+    bool extract(const std::string& demo, std::string& blob, std::string& err, const std::atomic<bool>* cancel) {
+        state_t s;
+        if (!collect(demo, s, err, cancel))
+            return false;
+
+        std::string head = "{\"tick_interval\":" + std::to_string(s.tick_interval) + ",\"ticks\":" + std::to_string(s.ticks) + ",\"speakers\":[";
+        for (size_t i = 0; i < s.speakers.size(); i++)
+            head += (i ? ",\"" : "\"") + std::to_string(s.speakers[i]) + "\"";
         head += "],\"rounds\":[";
-        for (size_t i = 0; i < s->rounds.size(); i++) {
-            const round_t& r = s->rounds[i];
+        for (size_t i = 0; i < s.rounds.size(); i++) {
+            const round_t& r = s.rounds[i];
             head += std::string(i ? "," : "") + "[" + std::to_string(r.start) + "," + std::to_string(r.live) + "," + std::to_string(r.end) + "]";
         }
         head += "],\"kills\":[";
-        for (size_t i = 0; i < s->kills.size(); i++) {
-            const kill_t& k = s->kills[i];
+        for (size_t i = 0; i < s.kills.size(); i++) {
+            const kill_t& k = s.kills[i];
             head += std::string(i ? "," : "") + "[" + std::to_string(k.tick) + "," + std::to_string(k.killer) + "," + std::to_string(k.victim) +
                     "," + (k.head ? "1" : "0") + "]";
         }
@@ -155,21 +202,16 @@ namespace voice {
         put32(blob, VERSION);
         put32(blob, (uint32_t)head.size());
         blob += head;
-        put32(blob, (uint32_t)s->packets.size());
-        for (size_t i = 0; i < s->packets.size(); i++) {
-            const packet_t& k = s->packets[i];
+        put32(blob, (uint32_t)s.packets.size());
+        for (size_t i = 0; i < s.packets.size(); i++) {
+            const packet_t& k = s.packets[i];
             uint8_t speaker = (uint8_t)k.speaker;
             uint16_t len = (uint16_t)k.len;
             blob.append((const char*)&speaker, 1);
             blob.append((const char*)&k.tick, 4);
             blob.append((const char*)&len, 2);
-            blob.append((const char*)s->bytes.data() + s->offsets[i], k.len);
+            blob.append((const char*)s.bytes.data() + s.offsets[i], k.len);
         }
-        if (!ok && err.empty())
-            err = p->err.empty() ? "cancelled" : p->err;
-        delete s;
-        demo::close(p->demo);
-        delete p;
-        return ok;
+        return true;
     }
 }

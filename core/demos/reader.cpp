@@ -230,7 +230,7 @@ namespace reader {
 
     void on_event(parser_t& p, const game_event_t& e, void* user) {
         state_t& s = *(state_t*)user;
-        if (e.desc->name == "round_announce_match_start") {
+        if (e.desc->kind == ek_round_announce_match_start) {
             for (slot_t& sl : s.slots)
                 sl.first = -1;
             for (std::string& c : s.clans)

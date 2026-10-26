@@ -709,22 +709,25 @@ namespace track {
 
     void on_event(parser_t& p, const game_event_t& e, void* user) {
         state_t& s = *(state_t*)user;
-        const std::string& name = e.desc->name;
         auto who = [&](const char* k) { return std::to_string(game_events::num(e, k, -1)); };
-        if (name == "round_prestart") {
+        switch (e.desc->kind) {
+        case ek_round_prestart:
             if (!s.rounds.empty() && s.rounds.back().end < 0)
                 s.rounds.back().end = p.tick;
             s.rounds.push_back({p.tick});
-        } else if (name == "round_freeze_end") {
+            break;
+        case ek_round_freeze_end:
             if (!s.rounds.empty() && s.rounds.back().live < 0) {
                 s.rounds.back().live = p.tick;
                 const entity_t* r = rules(p, s);
                 s.rounds.back().time = r ? read_int(p, s.round_time, *r, -1) : -1;
             }
-        } else if (name == "round_officially_ended") {
+            break;
+        case ek_round_officially_ended:
             if (!s.rounds.empty() && s.rounds.back().end < 0)
                 s.rounds.back().end = p.tick;
-        } else if (name == "round_announce_match_start") {
+            break;
+        case ek_round_announce_match_start: {
             s.live = true;
             s.kills.clear();
             s.hurts.clear();
@@ -747,47 +750,73 @@ namespace track {
                 if (r.end < 0)
                     open.push_back(r);
             s.rounds = open;
-        } else if (name == "player_death") {
+            break;
+        }
+        case ek_player_death: {
             int flags = (game_events::num(e, "penetrated", 0) ? 1 : 0) | (game_events::num(e, "thrusmoke", 0) ? 2 : 0) |
                         (game_events::num(e, "attackerblind", 0) ? 4 : 0) | (game_events::num(e, "noscope", 0) ? 8 : 0) |
                         (game_events::num(e, "assistedflash", 0) ? 16 : 0) | (game_events::num(e, "attackerinair", 0) ? 32 : 0);
             add(s.kills, "[" + std::to_string(p.tick) + "," + who("attacker") + "," + who("userid") + "," + (game_events::num(e, "headshot", 0) ? "1" : "0") +
                              ",\"" + game_events::str(e, "weapon") + "\"," + who("assister") + "," + std::to_string(flags) + "]");
-        } else if (name == "player_hurt") {
+            break;
+        }
+        case ek_player_hurt:
             add(s.hurts, "[" + std::to_string(p.tick) + "," + who("attacker") + "," + who("userid") + "," + who("dmg_health") + "," + who("dmg_armor") + "," +
                              who("health") + "," + who("hitgroup") + ",\"" + game_events::str(e, "weapon") + "\"]");
-        } else if (name == "weapon_fire") {
+            break;
+        case ek_weapon_fire:
             add(s.shots, "[" + std::to_string(p.tick) + "," + who("userid") + ",\"" + game_events::str(e, "weapon") + "\"]");
-        } else if (name == "player_blind") {
+            break;
+        case ek_player_blind: {
             int nade = -1;
             auto it = s.nade_of.find((int)game_events::num(e, "entityid", -1));
             if (it != s.nade_of.end())
                 nade = it->second;
             add(s.blinds, "[" + std::to_string(p.tick) + "," + who("userid") + "," + who("attacker") + "," +
                               std::to_string(game_events::flt(e, "blind_duration", 0)) + "," + std::to_string(nade) + "]");
-        } else if (name == "smokegrenade_detonate") {
+            break;
+        }
+        case ek_smokegrenade_detonate:
             detonate(p, s, e, w_smoke, false);
-        } else if (name == "smokegrenade_expired") {
+            break;
+        case ek_smokegrenade_expired:
             detonate(p, s, e, w_smoke, true);
-        } else if (name == "flashbang_detonate") {
+            break;
+        case ek_flashbang_detonate:
             detonate(p, s, e, w_flash, true);
-        } else if (name == "hegrenade_detonate") {
+            break;
+        case ek_hegrenade_detonate:
             detonate(p, s, e, w_he, true);
-        } else if (name == "decoy_started") {
+            break;
+        case ek_decoy_started:
             detonate(p, s, e, w_decoy, false);
-        } else if (name == "decoy_detonate") {
+            break;
+        case ek_decoy_detonate:
             detonate(p, s, e, w_decoy, true);
-        } else if (name == "inferno_startburn") {
+            break;
+        case ek_inferno_startburn: {
             int ent = (int)game_events::num(e, "entityid", -1);
             if (!s.fire_of.count(ent))
                 s.fire_of[ent] = open_fire(p, s);
-        } else if (name == "inferno_expire") {
+            break;
+        }
+        case ek_inferno_expire: {
             auto it = s.fire_of.find((int)game_events::num(e, "entityid", -1));
             if (it != s.fire_of.end() && s.fires[it->second].end < 0)
                 s.fires[it->second].end = p.tick;
-        } else if (name == "bomb_beginplant" || name == "bomb_abortplant" || name == "bomb_defused" || name == "bomb_exploded") {
+            break;
+        }
+        case ek_bomb_beginplant:
+        case ek_bomb_abortplant:
+        case ek_bomb_defused:
+        case ek_bomb_exploded: {
+            const char* kind = e.desc->kind == ek_bomb_beginplant ? "beginplant" : e.desc->kind == ek_bomb_abortplant ? "abortplant" : e.desc->kind == ek_bomb_defused ? "defused" : "exploded";
             float none[3] = {};
-            bomb_row(s, p.tick, name.c_str() + 5, (int)game_events::num(e, "userid", -1), none, 0);
+            bomb_row(s, p.tick, kind, (int)game_events::num(e, "userid", -1), none, 0);
+            break;
+        }
+        default:
+            break;
         }
     }
 

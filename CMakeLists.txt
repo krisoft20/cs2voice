@@ -20,5 +20,7 @@ set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin/$<CONFIG>)
 
 add_subdirectory(core)
 add_subdirectory(app)
+add_subdirectory(bench)
+add_subdirectory(tests)
 
 set_property(DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR} PROPERTY VS_STARTUP_PROJECT cs2voice)

@@ -7,7 +7,7 @@ namespace perfs {
     void cleanup();
     void clear();
     void forget(const std::vector<std::string>& paths);
-    void want(const demo_file_t& f, const std::string& map);
+    void want(const demo_file_t& f);
     void queue(const demo_file_t& f);
     void set_threads(int n, bool idle);
 }

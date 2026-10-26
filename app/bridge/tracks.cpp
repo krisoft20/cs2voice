@@ -105,7 +105,6 @@ namespace tracks {
             bool ok = load(f, &blob);
             bool disk = ok;
             if (!ok) {
-                jobs::wait_urgent(g_quit);
                 jobs::hold(true);
                 ok = track::extract(f.path, blob, err, &g_cancel);
                 jobs::hold(false);

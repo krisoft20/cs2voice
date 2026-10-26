@@ -44,7 +44,6 @@ namespace voices {
             }
             std::string blob, err;
             uint64_t t0 = GetTickCount64();
-            jobs::wait_urgent(g_quit);
             jobs::hold(true);
             bool ok = voice::extract(f.path, blob, err, &g_cancel);
             jobs::hold(false);

@@ -115,7 +115,7 @@ static bool value(reader_t& r, json_t& v) {
             ws(r);
             if (r.p >= r.end || *r.p++ != ':')
                 return false;
-            if (!value(r, v.obj[key]))
+            if (!value(r, v.obj.emplace_back(key, json_t{}).second))
                 return false;
             ws(r);
             if (r.p < r.end && *r.p == ',') {
@@ -199,15 +199,21 @@ bool parse(const std::string& text, json_t& out, std::string& err) {
     return true;
 }
 
-const json_t* at(const json_t& v, const std::string& key) {
+const json_t* at(const json_t& v, std::string_view key) {
     if (v.kind != jk_obj)
         return nullptr;
-    auto it = v.obj.find(key);
-    return it == v.obj.end() ? nullptr : &it->second;
+    for (const std::pair<std::string, json_t>& kv : v.obj)
+        if (kv.first == key)
+            return &kv.second;
+    return nullptr;
 }
 
-std::string str(const json_t* v, const std::string& def) {
-    return v && v->kind == jk_str ? v->str : def;
+std::string_view view(const json_t* v, std::string_view def) {
+    return v && v->kind == jk_str ? std::string_view(v->str) : def;
+}
+
+std::string str(const json_t* v, std::string_view def) {
+    return v && v->kind == jk_str ? v->str : std::string(def);
 }
 
 double num(const json_t* v, double def) {

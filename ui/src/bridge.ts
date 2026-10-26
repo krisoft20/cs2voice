@@ -141,7 +141,7 @@ export type Incoming =
   | { type: 'profiles'; items: Record<string, Profile> }
   | { type: 'me'; steamid: string }
   | { type: 'art'; map: string }
-  | { type: 'settings'; version: string; lang: string; loader?: string; updates: boolean; close?: string; steam?: boolean; setup?: SetupInfo; cleanup?: CleanupCfg }
+  | { type: 'settings'; version: string; lang: string; loader?: string; updates: boolean; close?: string; steam?: boolean; talk?: boolean; talkStyle?: number; talkLead?: number; talkMin?: number; talkRefresh?: number; setup?: SetupInfo; cleanup?: CleanupCfg }
   | { type: 'close_ask' }
   | { type: 'setup_error'; err: string }
   | { type: 'update'; version: string; notes: string; size: number; store?: boolean }
