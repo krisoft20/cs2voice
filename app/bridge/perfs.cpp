@@ -15,6 +15,7 @@
 #include "parser/parser.h"
 #include "perf/input.h"
 #include "perf/perf.h"
+#include "platform/crash.h"
 #include "platform/window.h"
 #include "text.h"
 
@@ -154,6 +155,7 @@ namespace perfs {
     }
 
     std::string measure(const demo_file_t& f, bool with_track, std::string& map, bool& ok) {
+        crash::set_task("stats for " + f.path);
         std::string err, geo_err;
         match_t* m = new match_t();
         std::string out;

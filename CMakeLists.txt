@@ -12,7 +12,8 @@ set(CMAKE_MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>")
 set(CMAKE_INTERPROCEDURAL_OPTIMIZATION_RELEASE ON)
 set_property(GLOBAL PROPERTY USE_FOLDERS ON)
 
-add_compile_options(/W4 /permissive- /utf-8 /Zc:preprocessor /MP)
+add_compile_options(/W4 /permissive- /utf-8 /Zc:preprocessor /MP $<$<CONFIG:Release>:/Z7>)
+add_link_options($<$<CONFIG:Release>:/DEBUG> $<$<CONFIG:Release>:/OPT:REF> $<$<CONFIG:Release>:/OPT:ICF> $<$<CONFIG:Release>:/PDBALTPATH:%_PDB%>)
 add_compile_definitions(WIN32_LEAN_AND_MEAN NOMINMAX UNICODE _UNICODE _CRT_SECURE_NO_WARNINGS CS2VOICE_VERSION="${PROJECT_VERSION}"
     CS2VOICE_MAJOR=${PROJECT_VERSION_MAJOR} CS2VOICE_MINOR=${PROJECT_VERSION_MINOR} CS2VOICE_PATCH=${PROJECT_VERSION_PATCH})
 

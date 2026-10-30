@@ -43,6 +43,9 @@ cmake --build --preset release
 if errorlevel 1 exit /b 1
 if not exist dist mkdir dist
 copy /y build\release\bin\Release\cs2voice.exe dist\cs2voice.exe >nul
+for /f "tokens=4 delims=() " %%v in ('findstr /b /c:"project(cs2voice VERSION" CMakeLists.txt') do set VER=%%v
+if not exist dist\symbols\%VER% mkdir dist\symbols\%VER%
+copy /y build\release\bin\Release\cs2voice.pdb dist\symbols\%VER%\cs2voice.pdb >nul
 powershell -NoProfile -Command "(Get-FileHash dist\cs2voice.exe -Algorithm SHA256).Hash.ToLower() + '  cs2voice.exe' | Set-Content -NoNewline -Encoding ascii dist\cs2voice.exe.sha256"
 type dist\cs2voice.exe.sha256
 echo.

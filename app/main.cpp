@@ -8,6 +8,7 @@
 #include "bridge/jobs.h"
 #include "dbg.h"
 #include "demos/talk.h"
+#include "platform/crash.h"
 #include "platform/setup.h"
 #include "platform/window.h"
 #include "text.h"
@@ -93,6 +94,7 @@ int WINAPI wWinMain(HINSTANCE inst, HINSTANCE, PWSTR, int) {
     }
     dbg::init(text::utf8(data) + "\\cs2voice.log");
     dbg::print("[+] cs2voice starting");
+    crash::init(data + L"\\crashes");
 
     std::wstring read = arg(L"--read");
     if (!read.empty()) {

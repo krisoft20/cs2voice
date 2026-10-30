@@ -7,7 +7,7 @@ target_include_directories(cs2voice PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
 target_include_directories(cs2voice SYSTEM PRIVATE ${PROJECT_SOURCE_DIR}/third_party/webview2/include)
 target_precompile_headers(cs2voice PRIVATE pch.h)
 target_link_libraries(cs2voice PRIVATE core ${PROJECT_SOURCE_DIR}/third_party/webview2/x64/WebView2LoaderStatic.lib
-    ole32 shell32 shlwapi dwmapi version winhttp crypt32 windowscodecs bcrypt windowsapp)
+    ole32 shell32 shlwapi dwmapi version winhttp crypt32 windowscodecs bcrypt windowsapp dbghelp)
 
 set(CS2VOICE_UI ${PROJECT_SOURCE_DIR}/ui/dist)
 file(GLOB_RECURSE UI_SOURCES CONFIGURE_DEPENDS ${PROJECT_SOURCE_DIR}/ui/src/*)

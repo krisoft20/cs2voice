@@ -10,6 +10,7 @@
 #include "demos/reader.h"
 #include "json/json.h"
 #include "parser/demo/zstdx.h"
+#include "platform/crash.h"
 #include "platform/window.h"
 #include "text.h"
 
@@ -311,6 +312,7 @@ namespace jobs {
                 me.cancel = false;
             }
             SetThreadPriority(GetCurrentThread(), urgent ? THREAD_PRIORITY_NORMAL : THREAD_PRIORITY_BELOW_NORMAL);
+            crash::set_task("reading " + f.path);
             roster_t r;
             if (quick) {
                 uint64_t t0 = GetTickCount64();
