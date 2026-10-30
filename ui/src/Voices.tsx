@@ -190,6 +190,25 @@ export function Voices(props: {
     return out
   }, [voice, v0, v1, span, muted, ready, peak])
 
+  const caps = useMemo(() => {
+    const out = new Map<number, { i: number; s: Spurt; left: number; width: number; d: string | null }[]>()
+    if (!voice) return out
+    voice.spurts.forEach((s, i) => {
+      if (s.end <= v0 || s.start >= v1) return
+      const left = Math.max(0, ((s.start - v0) / span) * 100)
+      const width = Math.max(Math.min(100, ((s.end - v0) / span) * 100) - left, 0.25)
+      out.set(s.speaker, [...(out.get(s.speaker) ?? []), { i, s, left, width, d: width > 0.6 ? shape(s, v0, v1, peak) : null }])
+    })
+    return out
+  }, [voice, v0, v1, span, ready, peak])
+
+  const talkBy = useMemo(() => {
+    const out = new Map<number, number>()
+    if (!voice) return out
+    for (const s of voice.spurts) out.set(s.speaker, (out.get(s.speaker) ?? 0) + Math.max(0, Math.min(s.end, v1) - Math.max(s.start, v0)))
+    return out
+  }, [voice, v0, v1])
+
   if (roster.voice === 0) return <div className="notice">{t('noVoiceNotice')}</div>
   if (err) return <div className="notice bad">{t('voiceFailed', { err })}</div>
   if (failed) return <div className="notice bad">{t('voiceFailed', { err: failed })}</div>
@@ -269,7 +288,7 @@ export function Voices(props: {
     if (ready < 1 || !clip) return
     setSaving(true)
     try {
-      const wav = await renderClip(voice, clip.v0, clip.v1, s => !muted.has(s))
+      const wav = await renderClip(voice, pb.load, clip.v0, clip.v1, s => !muted.has(s))
       const r = windows.findIndex(w => clip.v0 >= w.start && clip.v0 < w.end)
       const base = demo.replace(/^.*[\\/]/, '').replace(/\.dem(\.zst)?$/i, '')
       const name = `${base} ${r >= 0 ? `r${r + 1} ` : ''}${clock(clip.v0).replace(':', '-')}.wav`
@@ -287,7 +306,7 @@ export function Voices(props: {
     if (windows[r]) seek(windows[r].start)
   }
 
-  const talkIn = (speaker: number) => voice.spurts.reduce((n, s) => (s.speaker === speaker ? n + Math.max(0, Math.min(s.end, v1) - Math.max(s.start, v0)) : n), 0)
+  const talkIn = (speaker: number) => talkBy.get(speaker) ?? 0
   const totalTalk = lanes.reduce((n, l) => n + talkIn(l.speaker), 0)
   const groups = [0, 1, 2].map(team => lanes.filter(l => l.team === team)).filter(g => g.length)
   const laneH = lanes.length > 10 ? Math.max(18, Math.floor(290 / lanes.length)) : 28
@@ -424,21 +443,15 @@ export function Voices(props: {
                       onMouseLeave={() => edgeHover && setEdgeHover(false)}
                     >
                       {death && <span className="vc-dead" style={{ left: `${Math.max(0, x(death.at))}%` }} />}
-                      {voice.spurts.map((s, i) => {
-                        if (s.speaker !== l.speaker || !inRange(s.start, s.end)) return null
-                        const left = Math.max(0, x(s.start))
-                        const width = Math.max(Math.min(100, x(s.end)) - left, 0.25)
-                        const d = width > 0.6 ? shape(s, v0, v1, peak) : null
-                        return (
-                          <span key={i} className={`vc-cap${at >= s.start && at < s.end ? ' live' : ''}`} style={{ left: `${left}%`, width: `${width}%` }}>
-                            {d && (
-                              <svg viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden="true">
-                                <path d={d} />
-                              </svg>
-                            )}
-                          </span>
-                        )
-                      })}
+                      {(caps.get(l.speaker) ?? []).map(c => (
+                        <span key={c.i} className={`vc-cap${at >= c.s.start && at < c.s.end ? ' live' : ''}`} style={{ left: `${c.left}%`, width: `${c.width}%` }}>
+                          {c.d && (
+                            <svg viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden="true">
+                              <path d={c.d} />
+                            </svg>
+                          )}
+                        </span>
+                      ))}
                       {death && (
                         <span className="vc-skull" style={{ left: `${x(death.at)}%` }}>
                           <Icon name="icons_ui_kill" ready={icons} />

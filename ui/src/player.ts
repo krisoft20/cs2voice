@@ -1,8 +1,11 @@
-import type { Spurt, Voice } from './voicedata'
+import { bufferOf, drop, type Spurt, type Voice } from './voicedata'
 
 const LEAD = 0.05
 const SKIP_AFTER = 1.5
 const SKIP_BEFORE = 0.4
+const AHEAD = 20
+const BEHIND = 5
+const KEEP = 60
 
 export type Player = {
   ctx: AudioContext
@@ -13,12 +16,17 @@ export type Player = {
   from: number
   startedAt: number
   sources: AudioBufferSourceNode[]
+  started: Set<Spurt>
+  load: (list: Spurt[]) => Promise<void>
   skipSilence: boolean
   rate: number
 }
 
-export const create = (voice: Voice): Player => {
-  const ctx = new AudioContext({ sampleRate: 48000 })
+let shared: AudioContext | null = null
+
+export const create = (voice: Voice, load: (list: Spurt[]) => Promise<void>): Player => {
+  shared ??= new AudioContext({ sampleRate: 48000 })
+  const ctx = shared
   const master = ctx.createGain()
   master.connect(ctx.destination)
   const gains = voice.speakers.map(() => {
@@ -26,7 +34,7 @@ export const create = (voice: Voice): Player => {
     g.connect(master)
     return g
   })
-  return { ctx, voice, gains, master, playing: false, from: 0, startedAt: 0, sources: [], skipSilence: false, rate: 1 }
+  return { ctx, voice, gains, master, playing: false, from: 0, startedAt: 0, sources: [], started: new Set(), load, skipSilence: false, rate: 1 }
 }
 
 export const now = (p: Player) => (p.playing ? p.from + (p.ctx.currentTime - p.startedAt) * p.rate : p.from)
@@ -41,35 +49,57 @@ const stopSources = (p: Player) => {
     }
   }
   p.sources = []
+  p.started.clear()
 }
 
 const start = (p: Player, s: Spurt) => {
   const at = now(p)
-  if (!s.audio || s.end <= at) return
+  if (s.end <= at || p.started.has(s)) return
+  const buffer = bufferOf(s, p.ctx)
+  if (!buffer) return
   const src = p.ctx.createBufferSource()
-  src.buffer = s.audio
+  src.buffer = buffer
   src.playbackRate.value = p.rate
   src.connect(p.gains[s.speaker])
   const when = p.startedAt + (s.start - p.from) / p.rate
   src.start(Math.max(when, p.ctx.currentTime), Math.max(0, (p.ctx.currentTime - when) * p.rate))
+  src.onended = () => {
+    p.sources = p.sources.filter(x => x !== src)
+  }
   p.sources.push(src)
+  p.started.add(s)
 }
 
-const schedule = (p: Player, from: number) => {
-  p.from = from
-  p.startedAt = p.ctx.currentTime + LEAD
-  for (const s of p.voice.spurts) start(p, s)
+const near = (p: Player, at: number) => p.voice.spurts.filter(s => s.end > at && s.start < at + AHEAD * p.rate)
+
+const fill = (p: Player) => {
+  const at = now(p)
+  const want: Spurt[] = []
+  for (const s of near(p, at)) {
+    if (p.started.has(s)) continue
+    if (s.audio || s.pcm) start(p, s)
+    else want.push(s)
+  }
+  if (want.length)
+    void p.load(want).then(() => {
+      if (p.playing) for (const s of want) start(p, s)
+    })
+  trim(p, at)
 }
 
-export const decoded = (p: Player, s: Spurt) => {
-  if (p.playing) start(p, s)
+const trim = (p: Player, at: number) => {
+  for (const s of p.started) if (s.end < at - BEHIND) p.started.delete(s)
+  for (const s of p.voice.spurts)
+    if ((s.audio || s.pcm) && !p.started.has(s) && (s.end < at - BEHIND || s.start > at + KEEP * p.rate)) drop(s)
 }
 
 export const play = (p: Player, from = now(p)) => {
   stopSources(p)
   void p.ctx.resume()
   p.playing = true
-  schedule(p, Math.min(Math.max(0, from), p.voice.length))
+  p.from = Math.min(Math.max(0, from), p.voice.length)
+  p.startedAt = p.ctx.currentTime + LEAD
+  fill(p)
 }
 
 export const pause = (p: Player) => {
@@ -80,7 +110,11 @@ export const pause = (p: Player) => {
 
 export const seek = (p: Player, to: number) => {
   if (p.playing) play(p, to)
-  else p.from = Math.min(Math.max(0, to), p.voice.length)
+  else {
+    p.from = Math.min(Math.max(0, to), p.voice.length)
+    trim(p, p.from)
+    void p.load(near(p, p.from))
+  }
 }
 
 export const setVolume = (p: Player, volume: number) => {
@@ -114,6 +148,7 @@ export const tick = (p: Player, audible: (speaker: number) => boolean) => {
     p.from = p.voice.length
     return
   }
+  fill(p)
   if (!p.skipSilence) return
   if (talking(p, at).some(audible)) return
   const next = nextSpurt(p, at, audible)
@@ -122,5 +157,5 @@ export const tick = (p: Player, audible: (speaker: number) => boolean) => {
 
 export const destroy = (p: Player) => {
   stopSources(p)
-  void p.ctx.close()
+  p.master.disconnect()
 }

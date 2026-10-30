@@ -761,6 +761,12 @@ button:focus-visible {
   opacity: 0;
 }
 
+.tab-load.done *,
+.tab-load.done *::before,
+.tab-load.done *::after {
+  animation: none;
+}
+
 .l-mark {
   flex: none;
 }

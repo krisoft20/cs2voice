@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import * as engine from './player'
-import { decode, type Voice } from './voicedata'
+import { drop, open, type Spurt, type Voice } from './voicedata'
 
 export type Playback = {
   timeline: Voice | null
@@ -18,6 +18,7 @@ export type Playback = {
   setRate: (rate: number) => void
   setVolume: (volume: number) => void
   toggle: (speakers: number[]) => void
+  load: (list: Spurt[]) => Promise<void>
 }
 
 export function usePlayback(timeline: Voice | null, active: boolean): Playback {
@@ -46,35 +47,41 @@ export function usePlayback(timeline: Voice | null, active: boolean): Playback {
   const skipRef = useRef(skip)
   skipRef.current = skip
 
+  const source = useRef<((list: Spurt[]) => Promise<void>) | null>(null)
+
   useEffect(() => {
     if (!timeline) return
-    const p = engine.create(timeline)
+    let live = true
+    let done = 0
+    let shown = 0
+    const src = timeline.spurts.length
+      ? open(timeline, () => {
+          if (!live) return
+          const fraction = ++done / timeline.spurts.length
+          if (fraction - shown >= 0.02 || done === timeline.spurts.length) {
+            shown = fraction
+            setReady(fraction)
+          }
+        })
+      : null
+    const load = src ? src.load : () => Promise.resolve()
+    source.current = load
+    const p = engine.create(timeline, load)
     p.rate = rateRef.current
     p.skipSilence = skipRef.current
     p.master.gain.value = volumeRef.current
-    let live = true
     setReady(timeline.spurts.length ? 0 : 1)
     setFailed('')
     setPlaying(false)
     player.current = p
-    let done = 0
-    let shown = 0
-    if (timeline.spurts.length)
-      decode(timeline, p.ctx, s => {
-        if (!live) return
-        engine.decoded(p, s)
-        const fraction = ++done / timeline.spurts.length
-        if (fraction - shown >= 0.02 || done === timeline.spurts.length) {
-          shown = fraction
-          setReady(fraction)
-        }
-      })
-        .then(() => live && setReady(1))
-        .catch(e => live && setFailed(String(e)))
+    src?.envs.then(() => live && setReady(1)).catch(e => live && setFailed(String(e)))
     return () => {
       live = false
       player.current = null
+      source.current = null
       engine.destroy(p)
+      src?.close()
+      for (const s of timeline.spurts) drop(s)
     }
   }, [timeline])
 
@@ -156,5 +163,7 @@ export function usePlayback(timeline: Voice | null, active: boolean): Playback {
     return () => window.removeEventListener('keydown', key)
   }, [active])
 
-  return { timeline, ready, failed, at, playing, skip, rate, volume, muted, togglePlay, seek, setSkip, setRate, setVolume, toggle }
+  const load = (list: Spurt[]) => source.current?.(list) ?? Promise.resolve()
+
+  return { timeline, ready, failed, at, playing, skip, rate, volume, muted, togglePlay, seek, setSkip, setRate, setVolume, toggle, load }
 }

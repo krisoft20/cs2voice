@@ -5,7 +5,16 @@ const GAP = 0.3
 export type Round = { start: number; live: number; end: number }
 export type Kill = { at: number; killer: number; victim: number; head: boolean }
 
-export type Spurt = { speaker: number; start: number; end: number; frames: Uint8Array[]; audio?: AudioBuffer; env?: Float32Array }
+export type Spurt = { speaker: number; start: number; end: number; frames: Uint8Array[]; pcm?: Float32Array<ArrayBuffer>; audio?: AudioBuffer; env?: Float32Array }
+
+export const bufferOf = (s: Spurt, ctx: BaseAudioContext) => {
+  if (!s.audio && s.pcm) {
+    s.audio = ctx.createBuffer(1, s.pcm.length, RATE)
+    s.audio.copyToChannel(s.pcm, 0)
+    s.pcm = undefined
+  }
+  return s.audio
+}
 
 export const ENV_STEP = 0.025
 
@@ -67,68 +76,67 @@ export const parse = (buf: ArrayBuffer): Voice | null => {
   }
 }
 
-const decodeSpeaker = async (spurts: Spurt[], ctx: BaseAudioContext, each: (s: Spurt) => void) => {
-  const pending: { spurt: Spurt; chunks: Float32Array[]; left: number }[] = []
-  const order: number[] = []
-  let failed: unknown = null
-  const decoder = new AudioDecoder({
-    output: data => {
-      const job = pending[order.shift()!]
-      const pcm = new Float32Array(data.numberOfFrames)
-      data.copyTo(pcm, { planeIndex: 0, format: 'f32-planar' })
-      data.close()
-      job.chunks.push(pcm)
-      if (--job.left > 0) return
-      const total = job.chunks.reduce((n, c) => n + c.length, 0)
-      const audio = ctx.createBuffer(1, Math.max(total, 1), RATE)
-      const out = audio.getChannelData(0)
-      let o = 0
-      for (const c of job.chunks) {
-        out.set(c, o)
-        o += c.length
-      }
-      job.spurt.audio = audio
-      const step = Math.round(ENV_STEP * RATE)
-      const env = new Float32Array(Math.max(1, Math.ceil(out.length / step)))
-      for (let b = 0; b < env.length; b++) {
-        let sum = 0
-        const end = Math.min(out.length, (b + 1) * step)
-        for (let k = b * step; k < end; k++) sum += out[k] * out[k]
-        env[b] = Math.sqrt(sum / Math.max(1, end - b * step))
-      }
-      job.spurt.env = env
-      job.chunks = []
-      each(job.spurt)
-    },
-    error: e => {
-      failed = e
-    },
+export type Source = { envs: Promise<void>; load: (list: Spurt[]) => Promise<void>; close: () => void }
+
+export const open = (voice: Voice, each: (s: Spurt) => void): Source => {
+  const worker = new Worker(new URL('./voicedecode.worker.ts', import.meta.url), { type: 'module' })
+  const speakers = voice.speakers.map((_, i) => voice.spurts.flatMap((s, index) => (s.speaker === i ? [{ index, frames: s.frames }] : [])))
+  const index = new Map(voice.spurts.map((s, i) => [s, i]))
+  const asked = new Map<number, Promise<void>>()
+  const waiting = new Map<number, () => void>()
+  let next = 0
+  let envDone = () => {}
+  let envFail = (_: Error) => {}
+  const envs = new Promise<void>((resolve, reject) => {
+    envDone = resolve
+    envFail = reject
   })
-  decoder.configure({ codec: 'opus', sampleRate: RATE, numberOfChannels: 1 })
-  let ts = 0
-  for (const spurt of spurts) {
-    const index = pending.push({ spurt, chunks: [], left: spurt.frames.length }) - 1
-    for (const frame of spurt.frames) {
-      order.push(index)
-      decoder.decode(new EncodedAudioChunk({ type: 'key', timestamp: ts, data: frame }))
-      ts += Math.round(frameSeconds(frame[0]) * 1e6)
+  worker.onmessage = (e: MessageEvent<{ index?: number; pcm?: Float32Array<ArrayBuffer>; env?: Float32Array<ArrayBuffer>; envs?: boolean; loaded?: number; error?: string }>) => {
+    const m = e.data
+    if (m.error) envFail(new Error(m.error))
+    if (m.envs) envDone()
+    if (m.loaded !== undefined) {
+      waiting.get(m.loaded)?.()
+      waiting.delete(m.loaded)
+    }
+    if (m.index === undefined) return
+    const s = voice.spurts[m.index]
+    if (m.env) {
+      s.env = m.env
+      each(s)
+    }
+    if (m.pcm) {
+      if (!s.audio) s.pcm = m.pcm
+      asked.delete(m.index)
     }
   }
-  await decoder.flush()
-  decoder.close()
-  if (failed) throw failed
+  worker.onerror = e => envFail(new Error(e.message))
+  worker.postMessage({ speakers })
+  const load = (list: Spurt[]) => {
+    const fresh: number[] = []
+    const wait: Promise<void>[] = []
+    for (const s of list) {
+      const i = index.get(s)
+      if (i === undefined || s.pcm || s.audio) continue
+      const p = asked.get(i)
+      if (p) wait.push(p)
+      else fresh.push(i)
+    }
+    if (fresh.length) {
+      const id = next++
+      const p = new Promise<void>(resolve => waiting.set(id, resolve))
+      for (const i of fresh) asked.set(i, p)
+      wait.push(p)
+      worker.postMessage({ load: id, indices: fresh })
+    }
+    return Promise.all(wait).then(() => {})
+  }
+  return { envs, load, close: () => worker.terminate() }
 }
 
-export const decode = async (voice: Voice, ctx: BaseAudioContext, each: (s: Spurt) => void) => {
-  await Promise.all(
-    voice.speakers.map((_, i) =>
-      decodeSpeaker(
-        voice.spurts.filter(s => s.speaker === i),
-        ctx,
-        each,
-      ),
-    ),
-  )
+export const drop = (s: Spurt) => {
+  s.pcm = undefined
+  s.audio = undefined
 }
 
 const toBase64 = (bytes: Uint8Array) => {
@@ -159,16 +167,20 @@ const wav = (pcm: Float32Array) => {
   return new Uint8Array(buf)
 }
 
-export const renderClip = async (voice: Voice, from: number, to: number, audible: (speaker: number) => boolean) => {
+export const renderClip = async (voice: Voice, load: (list: Spurt[]) => Promise<void>, from: number, to: number, audible: (speaker: number) => boolean) => {
   const length = Math.max(1, Math.round((to - from) * RATE))
   const ctx = new OfflineAudioContext(1, length, RATE)
-  for (const s of voice.spurts) {
-    if (!s.audio || !audible(s.speaker) || s.end <= from || s.start >= to) continue
+  const used = voice.spurts.filter(s => audible(s.speaker) && s.end > from && s.start < to)
+  const cold = used.filter(s => !s.audio && !s.pcm)
+  await load(used)
+  for (const s of used) {
+    if (!s.audio && !s.pcm) continue
     const src = ctx.createBufferSource()
-    src.buffer = s.audio
+    src.buffer = bufferOf(s, ctx)!
     src.connect(ctx.destination)
     src.start(Math.max(0, s.start - from), Math.max(0, from - s.start))
   }
   const out = await ctx.startRendering()
+  for (const s of cold) drop(s)
   return toBase64(wav(out.getChannelData(0)))
 }
