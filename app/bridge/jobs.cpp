@@ -2,6 +2,7 @@
 
 #include <tlhelp32.h>
 
+#include "bridge/history.h"
 #include "bridge/jobs.h"
 #include "bridge/perfs.h"
 #include "bridge/profiles.h"
@@ -368,6 +369,7 @@ namespace jobs {
             }
             finish(me);
             window::post_json(j);
+            history::note(j, f.mtime);
             if (!urgent) {
                 std::vector<std::string> ids;
                 for (const roster_player_t& p : r.players)
@@ -388,6 +390,19 @@ namespace jobs {
             SetThreadPriority(g_workers[i].thread.native_handle(), THREAD_PRIORITY_BELOW_NORMAL);
         }
         return true;
+    }
+
+    void seed_history() {
+        std::vector<std::pair<std::string, int64_t>> full;
+        {
+            std::lock_guard<std::mutex> lock(g_mu);
+            for (const auto& [path, e] : g_cache)
+                if (is_full(e))
+                    full.push_back({e.json, e.mtime});
+        }
+        for (const auto& [j, mtime] : full)
+            history::note(j, mtime, true);
+        dbg::print("[jobs] history seeded from %zu cached demos", full.size());
     }
 
     void cleanup() {

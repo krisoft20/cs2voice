@@ -1,13 +1,14 @@
 import { useCallback, useEffect, useId, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import type { ReactNode } from 'react'
-import { listen, send, type CleanupCfg, type SetupInfo, type Demo, type FaceitPlayer, type Folder, type Player, type Profile, type Roster, type Stats, type Storage, type PerfMsg, type PerfRow, type SkinsMsg, type SkinItem } from './bridge'
+import { listen, send, type CleanupCfg, type SetupInfo, type Demo, type FaceitPlayer, type Folder, type HistoryMatch, type Player, type Profile, type Roster, type Stats, type Storage, type PerfMsg, type PerfRow, type SkinsMsg, type SkinItem } from './bridge'
 import { LANGS, gameLang, resolve, translator, type Key, type Lang, type LangChoice } from './i18n'
 import { BoltIcon, BombIcon, CalendarIcon, CheckIcon, ChevronDownIcon, ChevronLeftIcon, ChevronRightIcon, ClockIcon, CloseIcon, CloudIcon, CrownIcon, DemosIcon, DiskIcon, DoorIcon, FlameIcon, FolderIcon, FolderPlusIcon, HelpIcon, InfoIcon, LanguageIcon, LockIcon, LogoMark, MicIcon, MicOffIcon, MinusIcon, PaletteIcon, PlayIcon, PlusIcon, RefreshIcon, SearchIcon, SettingsIcon, ShieldIcon, Speaker, SteamIcon, SunIcon, TargetIcon, TradeIcon, UserMinusIcon, UsersIcon, WallIcon } from './icons'
 import { Avatar, UiContext, useUi, type Loader } from './common'
 import { decode, draw } from './crosshair'
 import { Check, CleanupCard, CleanupReview, CleanupSettings } from './Cleanup'
-import { planCleanup } from './cleanplan'
+import { planCleanup, signature } from './cleanplan'
 import { DemoList } from './DemoList'
+import { Met, meetings, type Meeting } from './Met'
 import { Details } from './Details'
 import { MEASURES, bins, median, rating, type Measure } from './stats'
 import { REFERENCE } from './reference'
@@ -35,6 +36,7 @@ export default function App() {
   const [avatars, setAvatars] = useState<Record<string, string>>({})
   const [profiles, setProfiles] = useState<Record<string, Profile>>({})
   const [me, setMe] = useState('')
+  const [history, setHistory] = useState<Record<string, HistoryMatch>>({})
   const [art, setArt] = useState<Record<string, boolean>>({})
   const [choice, setChoice] = useState<LangChoice>('system')
   const [version, setVersion] = useState('')
@@ -170,6 +172,8 @@ export default function App() {
         setProfiles(f => ({ ...f, ...m.items }))
       }
       else if (m.type === 'me') setMe(m.steamid)
+      else if (m.type === 'history') setHistory(Object.fromEntries(m.matches.map(x => [x.key, x])))
+      else if (m.type === 'history_add') setHistory(h => ({ ...h, [m.match.key]: m.match }))
       else if (m.type === 'art') setArt(a => ({ ...a, [m.map]: true }))
       else if (m.type === 'voice') setVoice({ path: m.path, data: m.data, err: m.err })
       else if (m.type === 'track') setTrack({ path: m.path, data: m.data, err: m.err })
@@ -262,6 +266,15 @@ export default function App() {
   }, [cleanup.mode])
   const rawRoster = selected ? rosters[selected] : undefined
   const roster = useMemo(() => withFaceit(rawRoster, selected ? faceit[selected] : undefined), [rawRoster, selected, faceit])
+  const met = useMemo(() => meetings(history, rawRoster, me), [history, rawRoster, me])
+  const byKey = useMemo(() => {
+    const out: Record<string, string> = {}
+    for (const d of demos ?? []) {
+      const sig = signature(rosters[d.path])
+      if (sig && !out[sig]) out[sig] = d.path
+    }
+    return out
+  }, [demos, rosters])
   useEffect(() => {
     if (selected && rawRoster?.ok && !faceit[selected]) send({ type: 'faceit', path: selected })
   }, [selected, !!rawRoster?.ok])
@@ -370,6 +383,9 @@ export default function App() {
                   key={demo.path}
                   demo={demo}
                   roster={roster}
+                  met={met}
+                  hasMatch={key => !!byKey[key]}
+                  openMatch={key => byKey[key] && setSelected(byKey[key])}
                   reading={!!reading[demo.path] || !roster}
                   chosen={chosen}
                   setChosen={setChosen}
@@ -759,6 +775,9 @@ type Fix = { state: 'running' | 'done' | 'error'; err?: string }
 function DemoView(props: {
   demo: Demo
   roster?: Roster
+  met: Record<string, Meeting[]>
+  hasMatch: (key: string) => boolean
+  openMatch: (key: string) => void
   reading: boolean
   chosen: Set<number>
   setChosen: (s: Set<number>) => void
@@ -781,7 +800,7 @@ function DemoView(props: {
   onFix: () => void
 }) {
   const { t, lang, me } = useUi()
-  const { demo, roster, chosen, setChosen, copied, avatars, profiles, art, pool, voice, track, radar, perf, skins, econ, icons, saved, watch, onWatch, fix, onFix } = props
+  const { demo, roster, met, hasMatch, openMatch, chosen, setChosen, copied, avatars, profiles, art, pool, voice, track, radar, perf, skins, econ, icons, saved, watch, onWatch, fix, onFix } = props
   const [seenVoices, setSeenVoices] = useState(false)
   const [tab, setTab] = useState<'overview' | 'players' | 'details' | 'voices' | 'radar' | 'crosshairs' | 'skins'>(
     () => (new URLSearchParams(location.hash.slice(1)).get('tab') as 'players' | null) ?? 'overview',
@@ -1134,6 +1153,7 @@ function DemoView(props: {
                               <span className="nick" title={p.demoName ? t('demoNick', { name: p.demoName }) : undefined}>{p.name || t('slot', { n: p.slot })}</span>
                               {mvp === p.slot && <span className="mvp-chip">{t('awardMvp')}</span>}
                               <Badges profile={profiles[p.steamid]} mute={p.mute} />
+                              <Met list={met[p.steamid]} name={p.name} has={hasMatch} open={openMatch} />
                             </span>
                             {(hasVoice || (profiles[p.steamid]?.since ?? 0) > 0) && (
                               <span className="meterline">

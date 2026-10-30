@@ -113,6 +113,8 @@ export type RoundInfo = {
   bomb: [number, number, number][]
 }
 
+export type HistoryMatch = { key: string; date: number; path: string; map: string; score: [number, number]; players: [string, string, number, number, number, number][] }
+
 export type Demo = { path: string; name: string; folder: string; size: number; mtime: number; opened?: number; keep?: boolean; info?: Roster }
 
 export type SetupInfo = { store: boolean; installed: boolean; here: boolean; desktop: boolean; autostart: boolean; dir: string }
@@ -140,6 +142,8 @@ export type Incoming =
   | { type: 'copied'; text: string }
   | { type: 'profiles'; items: Record<string, Profile> }
   | { type: 'me'; steamid: string }
+  | { type: 'history'; matches: HistoryMatch[] }
+  | { type: 'history_add'; match: HistoryMatch }
   | { type: 'art'; map: string }
   | { type: 'settings'; version: string; lang: string; loader?: string; updates: boolean; close?: string; steam?: boolean; talk?: boolean; talkStyle?: number; talkLead?: number; talkMin?: number; talkRefresh?: number; setup?: SetupInfo; cleanup?: CleanupCfg }
   | { type: 'close_ask' }

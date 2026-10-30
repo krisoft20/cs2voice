@@ -80,6 +80,8 @@ export const UsersIcon = tabler(["M9 7m-4 0a4 4 0 1 0 8 0a4 4 0 1 0 -8 0", "M3 2
 
 export const PlayIcon = tabler(["M7 4v16l13 -8z"])
 
+export const SwordsIcon = tabler(["M21 3v5l-11 9l-4 4l-3 -3l4 -4l9 -11z", "M5 13l6 6", "M14.32 17.32l3.68 3.68l3 -3l-3.365 -3.365", "M10 5.5l-2 -2.5h-5v5l3 2.5"])
+
 export const CalendarIcon = tabler(["M4 7a2 2 0 0 1 2 -2h12a2 2 0 0 1 2 2v12a2 2 0 0 1 -2 2h-12a2 2 0 0 1 -2 -2v-12z", "M16 3v4", "M8 3v4", "M4 11h16"])
 
 export const ClockIcon = tabler(["M3 12a9 9 0 1 0 18 0a9 9 0 0 0 -18 0", "M12 7v5l3 3"])

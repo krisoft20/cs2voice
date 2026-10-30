@@ -16,7 +16,7 @@ export const DAY = 86400
 
 const lastUse = (d: Demo) => Math.max(d.opened ?? 0, d.mtime)
 
-const signature = (r: Roster | undefined) => {
+export const signature = (r: Roster | undefined) => {
   if (!r || !r.ok || r.partial || !r.players.length || !r.winners.length) return ''
   const ids = r.players.map(p => p.steamid).sort().join(',')
   return `${r.map}|${ids}|${r.winners.join('')}`

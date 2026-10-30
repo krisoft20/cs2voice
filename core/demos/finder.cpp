@@ -83,17 +83,25 @@ namespace finder {
         std::string vdf;
         if (root.empty() || !read_file(root + "\\config\\loginusers.vdf", vdf))
             return 0;
-        uint64_t last = 0;
+        uint64_t last = 0, newest = 0, newest_at = 0;
         for (size_t at = 0; at < vdf.size(); at++) {
             if (vdf[at] == '"' && at + 18 < vdf.size() && vdf.compare(at + 1, 4, "7656") == 0)
                 last = strtoull(vdf.c_str() + at + 1, nullptr, 10);
-            if (vdf.compare(at, 12, "\"MostRecent\"") == 0) {
+            if (at + 12 <= vdf.size() && _strnicmp(vdf.c_str() + at, "\"MostRecent\"", 12) == 0) {
                 size_t v = vdf.find('"', at + 12);
                 if (v != std::string::npos && vdf[v + 1] == '1')
                     return last;
             }
+            if (at + 11 <= vdf.size() && _strnicmp(vdf.c_str() + at, "\"timestamp\"", 11) == 0) {
+                size_t v = vdf.find('"', at + 11);
+                uint64_t when = v == std::string::npos ? 0 : strtoull(vdf.c_str() + v + 1, nullptr, 10);
+                if (last && when > newest_at) {
+                    newest_at = when;
+                    newest = last;
+                }
+            }
         }
-        return 0;
+        return newest;
     }
 
     std::string game_dir() {

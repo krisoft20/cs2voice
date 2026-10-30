@@ -7,6 +7,7 @@
 
 #include "bridge/bridge.h"
 #include "bridge/faceit.h"
+#include "bridge/history.h"
 #include "bridge/inventory.h"
 #include "bridge/jobs.h"
 #include "bridge/launch.h"
@@ -627,8 +628,11 @@ namespace bridge {
         profiles::init(data_dir + L"\\profiles.txt", data_dir + L"\\avatars");
         profiles::set_online(g_steam);
         faceit::init(data_dir + L"\\faceit.txt");
+        bool known = history::init(data_dir + L"\\history.txt");
         if (!jobs::init(data_dir + L"\\cache.txt"))
             return false;
+        if (!known)
+            jobs::seed_history();
         maps::init(data_dir + L"\\maps");
         inventory::init(data_dir + L"\\maps\\econ");
         voices::init();
@@ -655,6 +659,7 @@ namespace bridge {
         if (g_updates)
             update::check();
         web::post("{\"type\":\"me\",\"steamid\":\"" + std::to_string(finder::current_user()) + "\"}");
+        web::post(history::json());
         send_folders();
         rescan();
         for (const std::string& src : launch::fixed_sources())
