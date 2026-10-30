@@ -1,5 +1,7 @@
 #pragma once
 
+#include <functional>
+
 struct buffer_t {
     std::string bytes;
     std::string json;
@@ -13,6 +15,7 @@ namespace window {
     const UINT WM_SHOW = WM_APP + 5;
     const UINT WM_QUIT_APP = WM_APP + 6;
     const UINT WM_HIDE = WM_APP + 7;
+    const UINT WM_UI_CALL = WM_APP + 8;
 
     bool init(HINSTANCE inst, int w, int h, bool hidden);
     void cleanup();
@@ -20,6 +23,7 @@ namespace window {
     void post_json(const std::string& json);
     void post_buffer(std::string&& bytes, const std::string& json);
     void post_rescan();
+    void on_ui(std::function<void()> fn);
     void command(const std::string& action);
     void set_close(const std::string& mode);
     void start_in_tray();

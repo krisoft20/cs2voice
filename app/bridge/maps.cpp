@@ -14,6 +14,46 @@ namespace maps {
     std::string g_dir;
     std::string g_game;
     std::map<std::string, bool> g_known;
+    std::set<std::string> g_pending;
+    std::deque<std::function<void()>> g_jobs;
+    std::condition_variable g_cv;
+    std::thread g_worker;
+    bool g_quit = false;
+
+    void work() {
+        while (true) {
+            std::function<void()> job;
+            {
+                std::unique_lock<std::mutex> lock(g_mu);
+                g_cv.wait(lock, [] { return g_quit || !g_jobs.empty(); });
+                if (g_quit)
+                    return;
+                job = std::move(g_jobs.front());
+                g_jobs.pop_front();
+            }
+            job();
+        }
+    }
+
+    void later(std::function<void()> job) {
+        {
+            std::lock_guard<std::mutex> lock(g_mu);
+            if (!g_worker.joinable())
+                g_worker = std::thread(work);
+            g_jobs.push_back(std::move(job));
+        }
+        g_cv.notify_all();
+    }
+
+    void cleanup() {
+        {
+            std::lock_guard<std::mutex> lock(g_mu);
+            g_quit = true;
+        }
+        g_cv.notify_all();
+        if (g_worker.joinable())
+            g_worker.join();
+    }
 
     bool init(const std::wstring& dir) {
         CreateDirectoryW(dir.c_str(), nullptr);
@@ -32,7 +72,6 @@ namespace maps {
     void ensure(const std::string& map) {
         if (map.empty())
             return;
-        bool have;
         {
             std::lock_guard<std::mutex> lock(g_mu);
             auto it = g_known.find(map);
@@ -41,8 +80,12 @@ namespace maps {
                     window::post_json("{\"type\":\"art\",\"map\":\"" + json::escape(map) + "\"}");
                 return;
             }
+            if (!g_pending.insert(map).second)
+                return;
+        }
+        later([map] {
             std::string png = g_dir + "\\" + map + ".png";
-            have = GetFileAttributesW(text::wide(png).c_str()) != INVALID_FILE_ATTRIBUTES;
+            bool have = GetFileAttributesW(text::wide(png).c_str()) != INVALID_FILE_ATTRIBUTES;
             if (!have && !g_game.empty()) {
                 std::string err;
                 uint64_t t0 = GetTickCount64();
@@ -52,10 +95,14 @@ namespace maps {
                 else
                     dbg::print("[maps] %s extracted in %llu ms", map.c_str(), (unsigned long long)(GetTickCount64() - t0));
             }
-            g_known[map] = have;
-        }
-        if (have)
-            window::post_json("{\"type\":\"art\",\"map\":\"" + json::escape(map) + "\"}");
+            {
+                std::lock_guard<std::mutex> lock(g_mu);
+                g_known[map] = have;
+                g_pending.erase(map);
+            }
+            if (have)
+                window::post_json("{\"type\":\"art\",\"map\":\"" + json::escape(map) + "\"}");
+        });
     }
 
     bool radar_png(const std::string& name) {
@@ -74,19 +121,19 @@ namespace maps {
         return true;
     }
 
+    void radar_now(const std::string& map);
+
     void radar(const std::string& map) {
         if (map.empty() || g_game.empty())
             return;
+        later([map] { radar_now(map); });
+    }
+
+    void radar_now(const std::string& map) {
         overview_t o;
         std::string err;
-        bool ok;
-        bool lower = false;
-        {
-            std::lock_guard<std::mutex> lock(g_mu);
-            ok = art::overview(g_game, map, o, err) && radar_png(map);
-            if (ok && o.lower)
-                lower = radar_png(map + "_lower");
-        }
+        bool ok = art::overview(g_game, map, o, err) && radar_png(map);
+        bool lower = ok && o.lower && radar_png(map + "_lower");
         if (!ok) {
             dbg::print("[maps] no radar for %s: %s", map.c_str(), err.c_str());
             window::post_json("{\"type\":\"radar\",\"map\":\"" + json::escape(map) + "\",\"ok\":false}");

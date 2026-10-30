@@ -29,10 +29,16 @@ export function Check(props: { on: boolean; onChange: (on: boolean) => void; lab
 export function CleanupSettings(props: { cfg: CleanupCfg; folders: Folder[]; plan: CleanupRow[]; onReview: () => void }) {
   const { t, lang } = useUi()
   const { cfg, folders, plan, onReview } = props
+  const [armed, setArmed] = useState(false)
+  useEffect(() => {
+    if (!armed) return
+    const id = window.setTimeout(() => setArmed(false), 3000)
+    return () => clearTimeout(id)
+  }, [armed])
   const modes: { id: CleanupCfg['mode']; name: Parameters<typeof t>[0] }[] = [
-    { id: 'off', name: 'cleanupOff' },
     { id: 'ask', name: 'cleanupAsk' },
     { id: 'auto', name: 'cleanupAuto' },
+    { id: 'off', name: 'cleanupOff' },
   ]
   return (
     <section className="setting">
@@ -52,10 +58,10 @@ export function CleanupSettings(props: { cfg: CleanupCfg; folders: Folder[]; pla
           <div className="cl-grid">
             <div className="cl-col">
               <h3>{t('cleanupOld')}</h3>
-              <div className="cl-days">
-                <span>{t('cleanupNotOpened')}</span>
+              <span className="cl-label">{t('cleanupNotOpened')}</span>
+              <div className="choices" role="radiogroup" aria-label={t('cleanupNotOpened')}>
                 {DAYS.map(d => (
-                  <button key={d} className={cfg.days === d ? 'on' : ''} onClick={() => set('cleanup_days', String(d))}>
+                  <button key={d} role="radio" aria-checked={cfg.days === d} className={`choice${cfg.days === d ? ' on' : ''}`} onClick={() => set('cleanup_days', String(d))}>
                     {t('cleanupDays', { n: d })}
                   </button>
                 ))}
@@ -68,12 +74,22 @@ export function CleanupSettings(props: { cfg: CleanupCfg; folders: Folder[]; pla
             </div>
             <div className="cl-col">
               <h3>{t('cleanupHow')}</h3>
-              <div className="cl-days">
-                <button className={cfg.method === 'recycle' ? 'on' : ''} onClick={() => set('cleanup_method', 'recycle')}>
+              <div className="choices" role="radiogroup" aria-label={t('cleanupHow')}>
+                <button role="radio" aria-checked={cfg.method === 'recycle'} className={`choice${cfg.method === 'recycle' ? ' on' : ''}`} onClick={() => set('cleanup_method', 'recycle')}>
                   {t('cleanupRecycle')}
                 </button>
-                <button className={cfg.method === 'delete' ? 'on danger' : ''} onClick={() => set('cleanup_method', 'delete')}>
-                  {t('cleanupDeleteGo')}
+                <button
+                  role="radio"
+                  aria-checked={cfg.method === 'delete'}
+                  className={`choice${cfg.method === 'delete' ? ' on danger' : armed ? ' danger' : ''}`}
+                  onClick={() => {
+                    if (cfg.method === 'delete') return
+                    if (!armed) return setArmed(true)
+                    setArmed(false)
+                    set('cleanup_method', 'delete')
+                  }}
+                >
+                  {armed ? t('cleanupDeleteConfirm') : t('cleanupDeleteGo')}
                 </button>
               </div>
               <h3>{t('cleanupFolders')}</h3>
@@ -90,7 +106,9 @@ export function CleanupSettings(props: { cfg: CleanupCfg; folders: Folder[]; pla
               <>
                 <b>{count(files(plan), t)}</b>
                 <span>{bytesText(total(plan), lang)}</span>
-                <small>{t(cfg.mode === 'auto' ? 'cleanupAutoNote' : 'cleanupNow')}</small>
+                <small className={cfg.method === 'delete' ? 'danger' : ''}>
+                  {t(cfg.method === 'delete' ? (cfg.mode === 'auto' ? 'cleanupAutoGone' : 'cleanupGone') : cfg.mode === 'auto' ? 'cleanupAutoNote' : 'cleanupNow')}
+                </small>
                 <button onClick={onReview}>{t('cleanupReview')}</button>
               </>
             ) : (

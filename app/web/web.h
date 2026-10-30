@@ -10,6 +10,10 @@ namespace web {
     bool runtime();
     void cleanup();
     void resize();
+    bool mouse(UINT msg, WPARAM wp, LPARAM lp);
+    bool cursor();
+    int hit(POINT client);
+    void focus();
     void post(const std::string& json);
     void post_buffer(const std::string& bytes, const std::string& json);
     void screenshot(const std::wstring& path, const std::wstring& page, UINT delay_ms);

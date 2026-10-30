@@ -1,14 +1,16 @@
 import { useCallback, useEffect, useId, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import type { ReactNode } from 'react'
-import { listen, send, type CleanupCfg, type SetupInfo, type Demo, type FaceitPlayer, type Folder, type HistoryMatch, type Player, type Profile, type Roster, type Stats, type Storage, type PerfMsg, type PerfRow, type SkinsMsg, type SkinItem } from './bridge'
+import { listen, send, type Clip, type ClipFile, type PlayerState, type ReplayMatch, type CleanupCfg, type SetupInfo, type Demo, type FaceitPlayer, type Folder, type HistoryMatch, type Player, type Profile, type Roster, type Stats, type Storage, type PerfMsg, type PerfRow, type SkinsMsg, type SkinItem } from './bridge'
 import { LANGS, gameLang, resolve, translator, type Key, type Lang, type LangChoice } from './i18n'
-import { BoltIcon, BombIcon, CalendarIcon, CheckIcon, ChevronDownIcon, ChevronLeftIcon, ChevronRightIcon, ClockIcon, CloseIcon, CloudIcon, CrownIcon, DemosIcon, DiskIcon, DoorIcon, FlameIcon, FolderIcon, FolderPlusIcon, HelpIcon, InfoIcon, LanguageIcon, LockIcon, LogoMark, MicIcon, MicOffIcon, MinusIcon, PaletteIcon, PlayIcon, PlusIcon, RefreshIcon, SearchIcon, SettingsIcon, ShieldIcon, Speaker, SteamIcon, SunIcon, TargetIcon, TradeIcon, UserMinusIcon, UsersIcon, WallIcon } from './icons'
+import { BoltIcon, BombIcon, CalendarIcon, CheckIcon, ChevronDownIcon, ChevronLeftIcon, ChevronRightIcon, ClipIcon, ClockIcon, CloseIcon, CloudIcon, CrownIcon, DemoFileIcon, DiskIcon, DoorIcon, FlameIcon, FolderIcon, FolderPlusIcon, HelpIcon, InfoIcon, LanguageIcon, LockIcon, LogoMark, MicIcon, MicOffIcon, MinusIcon, PlayIcon, PlusIcon, RefreshIcon, SearchIcon, SettingsIcon, ShieldIcon, Speaker, SteamIcon, SunIcon, TargetIcon, TradeIcon, UserMinusIcon, UsersIcon, VideoIcon, WallIcon } from './icons'
 import { Avatar, UiContext, useUi, type Loader } from './common'
 import { decode, draw } from './crosshair'
 import { Check, CleanupCard, CleanupReview, CleanupSettings } from './Cleanup'
 import { planCleanup, signature } from './cleanplan'
 import { DemoList } from './DemoList'
 import { Met, meetings, type Meeting } from './Met'
+import { ReplayList, ReplayFirst, ReplayNotice, ReplayView, replayScore, type ReplaysData } from './Replays'
+import { ClipsPage } from './Clips'
 import { Details } from './Details'
 import { MEASURES, bins, median, rating, type Measure } from './stats'
 import { REFERENCE } from './reference'
@@ -20,7 +22,7 @@ import { Voices } from './Voices'
 import { command, length, mapName, masks, sideName, source, teamLabels, when, rounds } from './voice'
 
 
-type Page = 'demos' | 'settings'
+type Page = 'demos' | 'settings' | 'replays' | 'clips'
 type Place = { page: Page; selected: string | null }
 
 const SPIN_MS = 800
@@ -82,7 +84,67 @@ export default function App() {
   const [help, setHelp] = useState(false)
   const spinStart = useRef(0)
   const artAsked = useRef(new Set<string>())
-  const [page, setPage] = useState<Page>(location.hash === '#settings' ? 'settings' : 'demos')
+  const [page, setPage] = useState<Page>(location.hash === '#settings' ? 'settings' : location.hash === '#replays' ? 'replays' : location.hash === '#clips' ? 'clips' : 'demos')
+  const [replays, setReplays] = useState<ReplaysData | null>(null)
+  const [fullscreen, setFullscreen] = useState(false)
+  const [playerState, setPlayerState] = useState<PlayerState | null>(null)
+  const [replay, setReplay] = useState<string | null>(null)
+  const [saving, setSaving] = useState<Record<string, number>>({})
+  const [chunkTables, setChunkTables] = useState<Record<string, [number, number, number, number][]>>({})
+  const [clips, setClips] = useState<Clip[]>([])
+  const [clipFiles, setClipFiles] = useState<ClipFile[] | null>(null)
+  const [clipBytes, setClipBytes] = useState(0)
+  const [replayStart, setReplayStart] = useState<{ id: string; t: number } | null>(null)
+  const [replayPicker, setReplayPicker] = useState(true)
+  const pickReplay = (id: string) => {
+    setReplayStart(null)
+    setReplay(id)
+    setReplayPicker(false)
+  }
+  const replayMatch = replays?.matches.find(m => m.id === replay) ?? null
+  const replayTitle = useMemo(() => {
+    if (!replayMatch) return ''
+    const { a, b } = replayScore(replayMatch, demos, rosters, me)
+    return `${replayMatch.map}  ${a} : ${b}`
+  }, [replayMatch, demos, rosters, me])
+
+  useEffect(() => {
+    const key = (e: KeyboardEvent) => {
+      const step = e.key === 'ArrowRight' || e.key === 'ArrowDown' ? 1 : e.key === 'ArrowLeft' || e.key === 'ArrowUp' ? -1 : 0
+      const el = e.target as HTMLElement
+      const group = step && el.getAttribute?.('role') === 'radio' ? el.closest('[role="radiogroup"]') : null
+      if (!group) return
+      const radios = [...group.querySelectorAll<HTMLButtonElement>('[role="radio"]:not(:disabled)')]
+      const next = radios[(radios.indexOf(el as HTMLButtonElement) + step + radios.length) % radios.length]
+      if (!next) return
+      e.preventDefault()
+      next.focus()
+      next.click()
+    }
+    window.addEventListener('keydown', key)
+    return () => window.removeEventListener('keydown', key)
+  }, [])
+
+  useEffect(() => {
+    if (page === 'clips') send({ type: 'clips' })
+    if (page === 'clips' && !replays) send({ type: 'replays' })
+  }, [page])
+
+  useEffect(() => {
+    if (clips.some(c => c.state === 'done')) send({ type: 'clips' })
+  }, [clips.filter(c => c.state === 'done').length])
+
+  useEffect(() => {
+    if (page !== 'replays') return
+    send({ type: 'replays' })
+    setReplayPicker(true)
+  }, [page])
+
+  useEffect(() => {
+    if (!replays || replayMatch) return
+    const first = replays.matches.find(m => m.video) ?? replays.matches[0]
+    if (first) setReplay(first.id)
+  }, [replays, replayMatch])
 
   const [past, setPast] = useState<Place[]>([])
   const [future, setFuture] = useState<Place[]>([])
@@ -184,7 +246,29 @@ export default function App() {
       else if (m.type === 'icons') setIcons(true)
       else if (m.type === 'saved') setSaved(m.path)
       else if (m.type === 'storage') setStorage(m.items)
-      else if (m.type === 'window') setMaximized(m.maximized)
+      else if (m.type === 'window') {
+        setMaximized(m.maximized)
+        setFullscreen(!!m.fullscreen)
+      }
+      else if (m.type === 'replays') setReplays({ folder: m.folder, background: m.background, keep: m.keep, rate: m.rate, buffer: m.buffer, length: m.length, free: m.free, saved_dir: m.saved_dir, matches: m.matches })
+      else if (m.type === 'player') setPlayerState(m.state === 'closed' ? null : m)
+      else if (m.type === 'replay_chunks') setChunkTables(c => ({ ...c, [m.id]: m.list }))
+      else if (m.type === 'clip_progress') setClips(c => c.map(x => (x.id === m.id ? { ...x, p: m.p } : x)))
+      else if (m.type === 'clips') {
+        setClipFiles(m.items)
+        setClipBytes(m.bytes)
+      } else if (m.type === 'clip_thumb')
+        setClipFiles(f => f && f.map(x => (x.file === m.file ? { ...x, thumb: true, meta: x.meta ? { ...x.meta, len: x.meta.len || m.len } : { match: '', map: '', tag: '', from: 0, to: 0, len: m.len, fav: false } } : x)))
+      else if (m.type === 'clip_done')
+        setClips(c => c.map(x => (x.id === m.id ? { ...x, state: m.ok ? 'done' : 'failed', p: 1, path: m.path, bytes: m.bytes, err: m.err } : x)))
+      else if (m.type === 'replay_saving') setSaving(s => ({ ...s, [m.id]: m.total ? m.done / m.total : 0 }))
+      else if (m.type === 'replay_saved')
+        setSaving(s => {
+          const next = { ...s }
+          if (m.ok) delete next[m.id]
+          else next[m.id] = -1
+          return next
+        })
       else if (m.type === 'cleared') send({ type: 'storage' })
       else if (m.type === 'cache_cleared') {
         setRosters({})
@@ -314,7 +398,7 @@ export default function App() {
         onHelp={() => setHelp(true)}
         update={update?.version ?? ''}
         onUpdate={() => setShowUpdate(true)}
-        title={page === 'settings' ? ui.t('settings') : roster ? `${mapName(roster.map, ui.t)}${(!roster.partial || roster.ended) && roster.rounds > 0 ? `  ${roster.teams[0].score} : ${roster.teams[1].score}` : ''}` : ''}
+        title={page === 'settings' ? ui.t('settings') : page === 'clips' ? ui.t('clips') : page === 'replays' ? ((replays && replays.keep >= 0 && replayTitle) || ui.t('replays')) : roster ? `${mapName(roster.map, ui.t)}${(!roster.partial || roster.ended) && roster.rounds > 0 ? `  ${roster.teams[0].score} : ${roster.teams[1].score}` : ''}` : ''}
         maximized={maximized}
       />
       <div className={`app page-${page}`}>
@@ -415,6 +499,71 @@ export default function App() {
               )}
             </main>
           </>
+        ) : page === 'clips' ? (
+          <ClipsPage
+            files={clipFiles}
+            bytes={clipBytes}
+            making={clips}
+            matches={replays?.matches ?? null}
+            onGoTo={(id, t) => {
+              setReplay(id)
+              setReplayPicker(false)
+              setReplayStart({ id, t })
+              setPage('replays')
+            }}
+          />
+        ) : page === 'replays' ? (
+          <main className="main rp-main">
+            {replays && replays.keep < 0 ? (
+              <ReplayFirst
+                data={replays}
+                art={art}
+                demos={demos}
+                rosters={rosters}
+                me={me}
+                onDone={n => {
+                  setReplays(r => r && { ...r, keep: n })
+                  send({ type: 'replay_keep', n })
+                }}
+              />
+            ) : replayMatch ? (
+              <ReplayView
+                key={replayMatch.id}
+                m={replayMatch}
+                player={playerState}
+                demos={demos}
+                rosters={rosters}
+                me={me}
+                avatars={avatars}
+                icons={icons}
+                fullscreen={fullscreen}
+                count={replays?.matches.length ?? 0}
+                saving={saving[replayMatch.id]}
+                table={chunkTables[replayMatch.id] ?? null}
+                clips={clips}
+                onClip={c => setClips(list => [c, ...list])}
+                startPicking={replayPicker}
+                start={replayStart?.id === replayMatch.id ? replayStart.t : undefined}
+                keep={replays?.keep ?? 10}
+                onOpenClips={() => setPage('clips')}
+                onSave={(keep, cuts) => {
+                  setSaving(s => ({ ...s, [replayMatch.id]: 0 }))
+                  send({ type: 'replay_save', id: replayMatch.id, keep, cuts })
+                }}
+                picker={
+                  <>
+                    <ReplayNotice data={replays} />
+                    <ReplayList data={replays} selected={replay} onSelect={pickReplay} art={art} demos={demos} rosters={rosters} me={me} />
+                  </>
+                }
+              />
+            ) : (
+              <div className="rp-none">
+                <ReplayNotice data={replays} />
+                {replays && <ReplayList data={replays} selected={replay} onSelect={pickReplay} art={art} demos={demos} rosters={rosters} me={me} />}
+              </div>
+            )}
+          </main>
         ) : (
           <Settings
             cat={settingsCat}
@@ -461,6 +610,10 @@ export default function App() {
             onLang={pickLang}
             folders={folders}
             storage={storage}
+            saved={replays?.matches.filter(m => m.saved) ?? []}
+            keep={replays?.keep ?? 10}
+            demoBytes={(demos ?? []).reduce((n, d) => n + d.size, 0)}
+            clipBytes={clipBytes}
             loader={loader}
             onLoader={l => {
               setLoader(l)
@@ -745,7 +898,16 @@ function Rail(props: { page: Page; onPage: (p: Page) => void }) {
         <LogoMark />
       </span>
       <button className={`rail-btn${page === 'demos' ? ' on' : ''}`} onClick={() => onPage('demos')} aria-label={t('demos')}>
-        <DemosIcon />
+        <DemoFileIcon />
+        <small>{t('demos')}</small>
+      </button>
+      <button className={`rail-btn${page === 'replays' ? ' on' : ''}`} onClick={() => onPage('replays')} aria-label={t('replays')}>
+        <VideoIcon />
+        <small>{t('replays')}</small>
+      </button>
+      <button className={`rail-btn${page === 'clips' ? ' on' : ''}`} onClick={() => onPage('clips')} aria-label={t('clips')}>
+        <ClipIcon />
+        <small>{t('clips')}</small>
       </button>
       <button
         className={`rail-btn bottom${page === 'settings' ? ' on' : ''}`}
@@ -753,6 +915,7 @@ function Rail(props: { page: Page; onPage: (p: Page) => void }) {
         aria-label={t('settings')}
       >
         <SettingsIcon />
+        <small>{t('railSettings')}</small>
       </button>
     </nav>
   )
@@ -1238,16 +1401,79 @@ const STORAGE_LABELS: Record<string, Key> = {
   unpacked: 'storageUnpacked',
   avatars: 'storageAvatars',
   maps: 'storageMaps',
+  replays: 'storageReplays',
   webview: 'storageWebview',
+}
+
+const KEEP_CHOICES = [3, 6, 10, 15, 20, 0]
+
+function ClearCache() {
+  const { t } = useUi()
+  const [armed, setArmed] = useState(false)
+  useEffect(() => {
+    if (!armed) return
+    const id = window.setTimeout(() => setArmed(false), 3000)
+    return () => clearTimeout(id)
+  }, [armed])
+  return (
+    <button
+      className={`ghost${armed ? ' danger' : ''}`}
+      onClick={() => {
+        if (!armed) return setArmed(true)
+        setArmed(false)
+        send({ type: 'clear_cache' })
+      }}
+    >
+      {armed ? t('clearCacheConfirm') : t('clearCache')}
+    </button>
+  )
+}
+
+function SavedRow(props: { m: ReplayMatch }) {
+  const { m } = props
+  const { t, lang } = useUi()
+  const [armed, setArmed] = useState(false)
+  useEffect(() => {
+    if (!armed) return
+    const id = window.setTimeout(() => setArmed(false), 3000)
+    return () => clearTimeout(id)
+  }, [armed])
+  return (
+    <li>
+      <span>
+        {m.map}
+        <small className="faint"> {when(m.unix, t, lang)}</small>
+        {m.auto && <small className="tag">{t('replayAutoTag')}</small>}
+      </span>
+      <span className="storage-size">{size(m.bytes ?? 0, lang)}</span>
+      {m.auto && (
+        <button className="ghost" onClick={() => send({ type: 'replay_pin', id: m.id })}>
+          {t('replayPin')}
+        </button>
+      )}
+      <button
+        className={`ghost${armed ? ' danger' : ''}`}
+        onClick={() => {
+          if (!armed) return setArmed(true)
+          send({ type: 'replay_delete', id: m.id })
+          window.setTimeout(() => send({ type: 'storage' }), 300)
+        }}
+      >
+        {armed ? t('deleteConfirm') : t('delete')}
+      </button>
+    </li>
+  )
 }
 
 const size = (bytes: number, lang: string) => {
   const mb = bytes / (1024 * 1024)
   if (mb < 0.1) return `${Math.round(bytes / 1024).toLocaleString(lang)} KB`
+  if (mb >= 1024) return `${(mb / 1024).toLocaleString(lang, { maximumFractionDigits: 1 })} GB`
   return `${mb.toLocaleString(lang, { maximumFractionDigits: 1 })} MB`
 }
 
 function NumField(props: { label: string; value: number; onSet: (v: number) => void; def: number; step: number; min?: number; off?: boolean }) {
+  const { t } = useUi()
   const shown = (props.value / 64).toFixed(2)
   const put = (ticks: number) => {
     if (Number.isFinite(ticks)) props.onSet(Math.max(props.min ?? 0, Math.round(ticks)))
@@ -1257,7 +1483,7 @@ function NumField(props: { label: string; value: number; onSet: (v: number) => v
     <label className="numfield">
       <span>{props.label}</span>
       <span className={`stepper${props.off ? ' off' : ''}`}>
-        <button type="button" disabled={props.off} onClick={() => bump(-1)} aria-label="less">
+        <button type="button" disabled={props.off} onClick={() => bump(-1)} aria-label={`${props.label}: ${t('numLess')}`}>
           {'\u2212'}
         </button>
         <input
@@ -1267,12 +1493,13 @@ function NumField(props: { label: string; value: number; onSet: (v: number) => v
           value={shown}
           onChange={e => put(Number(e.target.value.replace(',', '.')) * 64)}
         />
-        <button type="button" disabled={props.off} onClick={() => bump(1)} aria-label="more">
+        <span className="stepper-unit">s</span>
+        <button type="button" disabled={props.off} onClick={() => bump(1)} aria-label={`${props.label}: ${t('numMore')}`}>
           +
         </button>
       </span>
       {props.value !== props.def && !props.off && (
-        <button type="button" className="reset" onClick={() => props.onSet(props.def)} aria-label="reset">
+        <button type="button" className="reset" onClick={() => props.onSet(props.def)} aria-label={`${props.label}: ${t('numReset')}`}>
           {'\u21ba'}
         </button>
       )}
@@ -1280,7 +1507,7 @@ function NumField(props: { label: string; value: number; onSet: (v: number) => v
   )
 }
 
-type SettingsCat = 'general' | 'look' | 'demos' | 'storage' | 'about'
+type SettingsCat = 'general' | 'demos' | 'playback' | 'replays' | 'storage' | 'about'
 
 function Settings(props: {
   cat: SettingsCat
@@ -1306,6 +1533,10 @@ function Settings(props: {
   onLang: (c: LangChoice) => void
   folders: Folder[]
   storage: Storage[]
+  saved: ReplayMatch[]
+  keep: number
+  demoBytes: number
+  clipBytes: number
   loader: Loader
   onLoader: (l: Loader) => void
   closeMode: CloseMode
@@ -1315,7 +1546,7 @@ function Settings(props: {
   onInstall: (desktop: boolean, autostart: boolean) => void
 }) {
   const { t, lang } = useUi()
-  const { version, talk, onTalk, talkStyle, onTalkStyle, talkLead, onTalkLead, talkMin, onTalkMin, talkRefresh, onTalkRefresh, updates, onUpdates, steam, onSteam, cleanup, plan, onReview, choice, onLang, folders, storage, loader, onLoader, closeMode, onCloseMode, setup, setupErr, onInstall } = props
+  const { version, talk, onTalk, talkStyle, onTalkStyle, talkLead, onTalkLead, talkMin, onTalkMin, talkRefresh, onTalkRefresh, updates, onUpdates, steam, onSteam, cleanup, plan, onReview, choice, onLang, folders, storage, saved, keep, demoBytes, clipBytes, loader, onLoader, closeMode, onCloseMode, setup, setupErr, onInstall } = props
   const closeModes: { id: CloseMode; name: Key }[] = [
     { id: 'ask', name: 'closeAskMode' },
     { id: 'tray', name: 'closeTray' },
@@ -1330,12 +1561,17 @@ function Settings(props: {
   const [cat, setCat] = useState<SettingsCat>(props.cat)
   const cats: { id: typeof cat; name: Key; icon: () => ReactNode }[] = [
     { id: 'general', name: 'catGeneral', icon: LanguageIcon },
-    { id: 'look', name: 'catLook', icon: PaletteIcon },
     { id: 'demos', name: 'catDemos', icon: FolderIcon },
+    { id: 'playback', name: 'catPlayback', icon: PlayIcon },
+    { id: 'replays', name: 'replays', icon: VideoIcon },
     { id: 'storage', name: 'storage', icon: DiskIcon },
     { id: 'about', name: 'about', icon: InfoIcon },
   ]
-  useEffect(() => send({ type: 'storage' }), [])
+  useEffect(() => {
+    send({ type: 'storage' })
+    send({ type: 'replays' })
+    send({ type: 'clips' })
+  }, [])
   const options: { id: LangChoice; name: string }[] = [{ id: 'system', name: t('systemLanguage') }, ...LANGS.map(l => ({ id: l.id, name: l.name }))]
   return (
     <main className="settings">
@@ -1344,7 +1580,7 @@ function Settings(props: {
       <div className="settings-body">
         <nav className="settings-nav" aria-label={t('settings')}>
           {cats.map(c => (
-            <button key={c.id} className={cat === c.id ? 'on' : ''} onClick={() => setCat(c.id)}>
+            <button key={c.id} className={cat === c.id ? 'on' : ''} aria-current={cat === c.id ? 'page' : undefined} onClick={() => setCat(c.id)}>
               <c.icon />
               {t(c.name)}
             </button>
@@ -1408,7 +1644,7 @@ function Settings(props: {
             </div>
           </section>
           )}
-          {cat === 'look' && (
+          {cat === 'playback' && (
           <section className="setting">
             <div className="setting-head">
               <h2>{t('loaderTitle')}</h2>
@@ -1457,7 +1693,7 @@ function Settings(props: {
           </section>
           )}
           {cat === 'demos' && <CleanupSettings cfg={cleanup} folders={folders} plan={plan} onReview={onReview} />}
-          {cat === 'demos' && (
+          {cat === 'playback' && (
           <section className="setting">
             <div className="setting-head">
               <h2>{t('talkTitle')}</h2>
@@ -1466,14 +1702,18 @@ function Settings(props: {
             <div className="talk-opts">
               <div className="talk-main">
                 <div className="choices" role="radiogroup" aria-label={t('talkTitle')}>
-                  <button role="radio" aria-checked={!talk} className={`choice${!talk ? ' on' : ''}`} onClick={() => onTalk(false)}>{t('off')}</button>
                   <button role="radio" aria-checked={talk} className={`choice${talk ? ' on' : ''}`} onClick={() => onTalk(true)}>{t('on')}</button>
+                  <button role="radio" aria-checked={!talk} className={`choice${!talk ? ' on' : ''}`} onClick={() => onTalk(false)}>{t('off')}</button>
                 </div>
                 <div className="talk-row">
                   <span>{t('talkStyle')}</span>
                   <div className="choices" role="radiogroup" aria-label={t('talkStyle')}>
-                    <button role="radio" aria-checked={talkStyle === 0} disabled={!talk} className={`choice${talkStyle === 0 ? ' on' : ''}`} onClick={() => onTalkStyle(0)}>{'\u260a'}</button>
-                    <button role="radio" aria-checked={talkStyle === 1} disabled={!talk} className={`choice${talkStyle === 1 ? ' on' : ''}`} onClick={() => onTalkStyle(1)}>{t('talkWord')}</button>
+                    <button role="radio" aria-checked={talkStyle === 0} disabled={!talk} className={`choice${talkStyle === 0 ? ' on' : ''}`} onClick={() => onTalkStyle(0)}>
+                      {'\u260a'} {t('talkIcon')}
+                    </button>
+                    <button role="radio" aria-checked={talkStyle === 1} disabled={!talk} className={`choice${talkStyle === 1 ? ' on' : ''}`} onClick={() => onTalkStyle(1)}>
+                      {t('talkWord')}
+                    </button>
                   </div>
                 </div>
               </div>
@@ -1492,6 +1732,21 @@ function Settings(props: {
               <p>{t('storageText')}</p>
             </div>
             <ul className="storage-list">
+              {demoBytes > 0 && (
+                <li>
+                  <span>{t('storageDemos')}</span>
+                  <span className="storage-size">{size(demoBytes, lang)}</span>
+                </li>
+              )}
+              {clipBytes > 0 && (
+                <li>
+                  <span>{t('clips')}</span>
+                  <span className="storage-size">{size(clipBytes, lang)}</span>
+                  <button className="ghost" onClick={() => send({ type: 'clip_show', path: '' })}>
+                    {t('clipsFolder')}
+                  </button>
+                </li>
+              )}
               {storage.map(s => (
                 <li key={s.key}>
                   <span>{t(STORAGE_LABELS[s.key] ?? 'storageOther')}</span>
@@ -1505,10 +1760,39 @@ function Settings(props: {
               ))}
             </ul>
             <div className="row">
-              <button className="ghost" onClick={() => send({ type: 'clear_cache' })}>
-                {t('clearCache')}
-              </button>
+              <ClearCache />
             </div>
+          </section>
+          )}
+          {cat === 'replays' && (
+          <section className="setting">
+            <div className="setting-head">
+              <h2>{t('replayKeepLabel')}</h2>
+              <p>{t('replayKeepHint')}</p>
+            </div>
+            <div className="choices" role="radiogroup" aria-label={t('replayKeepLabel')}>
+              {KEEP_CHOICES.map(n => (
+                <button key={n} role="radio" aria-checked={Math.max(0, keep) === n} className={`choice${Math.max(0, keep) === n ? ' on' : ''}`} onClick={() => send({ type: 'replay_keep', n })}>
+                  {n ? t('replayKeepN', { n }) : t('replayKeepOff')}
+                </button>
+              ))}
+            </div>
+          </section>
+          )}
+          {cat === 'replays' && (
+          <section className="setting">
+            <div className="setting-head">
+              <h2>{t('savedMatches')}</h2>
+            </div>
+            {saved.length ? (
+              <ul className="storage-list">
+                {saved.map(m => (
+                  <SavedRow key={m.id} m={m} />
+                ))}
+              </ul>
+            ) : (
+              <p className="faint">{t('savedNone')}</p>
+            )}
           </section>
           )}
           {cat === 'about' && (
@@ -1573,8 +1857,18 @@ const normTone = (key: Key, unit: string, v: number | null) => {
   return green((at + part - 10) / 10)
 }
 
-const fmt = (v: number | null, digits: number, lang: string) =>
-  v === null ? '–' : v.toLocaleString(lang, { minimumFractionDigits: digits, maximumFractionDigits: digits })
+const numberFormats = new Map<string, Intl.NumberFormat>()
+
+const fmt = (v: number | null, digits: number, lang: string) => {
+  if (v === null) return '–'
+  const key = `${lang}|${digits}`
+  let f = numberFormats.get(key)
+  if (!f) {
+    f = new Intl.NumberFormat(lang, { minimumFractionDigits: digits, maximumFractionDigits: digits })
+    numberFormats.set(key, f)
+  }
+  return f.format(v)
+}
 
 function InstallSetting(props: { setup: SetupInfo; err: string; onInstall: (desktop: boolean, autostart: boolean) => void }) {
   const { t } = useUi()
@@ -1874,6 +2168,8 @@ function PerfTile(props: { kind: (typeof PERF_TILES)[number]; value: number | nu
   )
 }
 
+const SHOT_MIN = 10
+
 const SHOT_TILES: { key: 'firstShot' | 'counterStrafe' | 'swings'; note: Key; of: (r: PerfRow) => [number, number] }[] = [
   { key: 'firstShot', note: 'firstShots', of: r => [r.first_hits, r.first] },
   { key: 'counterStrafe', note: 'rifleShots', of: r => [r.stopped, r.stops] },
@@ -1884,15 +2180,16 @@ function ShotTile(props: { kind: (typeof SHOT_TILES)[number]; row?: PerfRow; wai
   const { t, lang } = useUi()
   const { kind, row, waiting } = props
   const [part, n] = row ? kind.of(row).map(v => v ?? 0) : [0, 0]
-  const value = n > 0 ? (100 * part) / n : null
+  const enough = kind.key !== 'counterStrafe' || n >= SHOT_MIN
+  const value = n > 0 && enough ? (100 * part) / n : enough ? null : 0
   return (
     <div className="tile">
       <div className="tile-label">{t(kind.key)}</div>
-      <div className="tile-value" style={normTone(kind.key, '%', value)}>
-        {waiting ? <TabSpin on /> : fmt(value, 1, lang)}
+      <div className={`tile-value${enough ? '' : ' faint'}`} style={enough ? normTone(kind.key, '%', value) : undefined}>
+        {waiting ? <TabSpin on /> : fmt(value, enough ? 1 : 0, lang)}
         {!waiting && value !== null && <small>%</small>}
       </div>
-      {!waiting && <div className="tile-note">{t(kind.note, { n })}</div>}
+      {!waiting && <div className="tile-note">{enough ? t(kind.note, { n }) : t('notEnoughData', { n })}</div>}
     </div>
   )
 }

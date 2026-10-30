@@ -118,6 +118,13 @@ const ICON: Record<number, string> = {
 
 export const itemIcon = (id: number) => `icons_equipment_${ICON[id] ?? 'knife'}`
 
+export const weaponName = (weapon: string) => {
+  const name = weapon.replace(/^weapon_/, '')
+  if (name.startsWith('knife') || name === 'bayonet') return 'Knife'
+  const id = Object.keys(ICON).find(k => ICON[Number(k)] === name)
+  return id ? itemName(Number(id)) : name
+}
+
 export const weaponIcon = (weapon: string) => `icons_equipment_${weapon.replace(/^weapon_/, '') || 'world'}`
 
 export const GRENADES = [43, 44, 45, 46, 47, 48]

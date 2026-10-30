@@ -11,6 +11,7 @@
 #include "platform/crash.h"
 #include "platform/setup.h"
 #include "platform/window.h"
+#include "player/player.h"
 #include "text.h"
 #include "web/web.h"
 
@@ -158,6 +159,7 @@ int WINAPI wWinMain(HINSTANCE inst, HINSTANCE, PWSTR, int) {
         code = 0;
     }
 
+    player::cleanup();
     web::cleanup();
     bridge::cleanup();
     window::cleanup();

@@ -134,6 +134,57 @@ export type Folder = { path: string; custom: boolean }
 
 export type Storage = { key: string; bytes: number; files: number }
 
+export type ReplayEvent = [number, string, string, string, string]
+
+export type ReplayMatch = {
+  id: string
+  mode: string
+  map: string
+  kda: string
+  score: string
+  unix: number
+  duration: number
+  video?: string
+  codec?: string
+  at?: number
+  from?: number
+  to?: number
+  saved?: boolean
+  auto?: boolean
+  live?: boolean
+  done?: boolean
+  bytes?: number
+  cuts?: [number, number][]
+  events: ReplayEvent[]
+}
+
+export type ClipMeta = { match: string; map: string; tag: string; from: number; to: number; len: number; fav: boolean }
+
+export type ClipFile = { file: string; path: string; bytes: number; mtime: number; thumb: boolean; meta: ClipMeta | null }
+
+export type Clip = {
+  id: string
+  name: string
+  match: string
+  preset: string
+  state: 'making' | 'done' | 'failed'
+  p: number
+  path: string
+  bytes: number
+  err: string
+}
+
+export type PlayerState = {
+  state: 'playing' | 'paused' | 'ended' | 'error' | 'closed'
+  t: number
+  rate?: number
+  start: number
+  end: number
+  width: number
+  height: number
+  err: string
+}
+
 export type Incoming =
   | { type: 'demos'; items: Demo[] }
   | { type: 'folders'; items: Folder[] }
@@ -161,10 +212,19 @@ export type Incoming =
   | { type: 'storage'; items: Storage[] }
   | { type: 'cleared' }
   | { type: 'cache_cleared' }
-  | { type: 'window'; maximized: boolean }
+  | { type: 'window'; maximized: boolean; fullscreen?: boolean }
   | { type: 'watch'; state: 'unpacking' | 'copied' | 'error'; err?: string; line?: string }
   | { type: 'fixed'; path: string; ok: boolean; err: string }
   | { type: 'faceit'; path: string; players: FaceitPlayer[] }
+  | { type: 'replays'; folder: string; background: number; keep: number; rate?: number; buffer?: number; length?: number; free?: number; saved_dir?: string; matches: ReplayMatch[] }
+  | { type: 'replay_saving'; id: string; done: number; total: number }
+  | { type: 'replay_saved'; id: string; ok: boolean }
+  | { type: 'replay_chunks'; id: string; list: [number, number, number, number][] }
+  | { type: 'clip_progress'; id: string; p: number }
+  | { type: 'clip_done'; id: string; ok: boolean; path: string; bytes: number; err: string }
+  | { type: 'clips'; dir: string; bytes: number; items: ClipFile[] }
+  | { type: 'clip_thumb'; file: string; len: number }
+  | ({ type: 'player' } & PlayerState)
 
 type Outgoing =
   | { type: 'ready' }
@@ -192,7 +252,7 @@ type Outgoing =
   | { type: 'storage' }
   | { type: 'clear_unpacked' }
   | { type: 'clear_cache' }
-  | { type: 'win'; action: 'minimize' | 'maximize' | 'close' | 'tray' | 'quit' | 'stay' }
+  | { type: 'win'; action: 'minimize' | 'maximize' | 'close' | 'tray' | 'quit' | 'stay' | 'fullscreen' | 'windowed' }
   | { type: 'tray_text'; open: string; quit: string }
   | { type: 'install'; desktop: boolean; autostart: boolean }
   | { type: 'uninstall'; data: boolean }
@@ -204,6 +264,29 @@ type Outgoing =
   | { type: 'set'; key: string; value: string }
   | { type: 'fix_demo'; path: string }
   | { type: 'faceit'; path: string }
+  | { type: 'replays' }
+  | { type: 'replay_save'; id: string; keep: number[]; cuts: [number, number][] }
+  | { type: 'replay_chunks'; id: string }
+  | { type: 'replay_delete'; id: string }
+  | { type: 'replay_pin'; id: string }
+  | { type: 'replay_keep'; n: number }
+  | { type: 'clip_make'; id: string; video: string; from: number; to: number; name: string; width: number; height: number; fps: number; bitrate: number; max_bytes: number; match: string; map: string; tag: string }
+  | { type: 'clip_cancel'; id: string }
+  | { type: 'clip_copy'; paths: string[] }
+  | { type: 'clip_show'; path: string }
+  | { type: 'clips' }
+  | { type: 'clip_delete'; paths: string[] }
+  | { type: 'clip_rename'; path: string; name: string }
+  | { type: 'clip_fav'; path: string; on: boolean }
+  | { type: 'player_open'; video: string; t: number }
+  | { type: 'player_play' }
+  | { type: 'player_pause' }
+  | { type: 'player_seek'; t: number }
+  | { type: 'player_close' }
+  | { type: 'player_rate'; v: number }
+  | { type: 'player_step'; d: number }
+  | { type: 'player_volume'; v: number }
+  | { type: 'player_rect'; x: number; y: number; w: number; h: number }
 
 type SharedBufferEvent = { getBuffer: () => ArrayBuffer; additionalData: unknown }
 

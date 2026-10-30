@@ -44,7 +44,7 @@ const COLUMNS: Column[] = [
 
 const GROUPS: Key[] = ['groupFrags', 'groupAim', 'groupOpening', 'groupUtility', 'groupEconomy']
 
-const ICONS = 'https://cs2voice-maps.example/icons/'
+export const ICONS = 'https://cs2voice-maps.example/icons/'
 const FLAGS: [number, string][] = [
   [1, 'hud_deathnotice_icon_headshot'],
   [2, 'hud_deathnotice_penetrate'],

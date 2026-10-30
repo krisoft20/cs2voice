@@ -6,6 +6,7 @@
 #include <wincrypt.h>
 
 #include "bridge/bridge.h"
+#include "bridge/clips.h"
 #include "bridge/faceit.h"
 #include "bridge/history.h"
 #include "bridge/inventory.h"
@@ -14,10 +15,14 @@
 #include "bridge/maps.h"
 #include "bridge/perfs.h"
 #include "bridge/profiles.h"
+#include "bridge/replays.h"
 #include "bridge/tracks.h"
 #include "bridge/update.h"
 #include "bridge/voices.h"
 #include "bridge/watch.h"
+#include "player/audio.h"
+#include "player/exporter.h"
+#include "player/player.h"
 #include "dbg.h"
 #include "demos/finder.h"
 #include "json/json.h"
@@ -28,6 +33,8 @@
 #include "web/web.h"
 
 namespace bridge {
+    const double SLOW_COMMAND_MS = 15;
+
     std::wstring g_settings;
     std::wstring g_data;
     std::vector<std::string> g_defaults;
@@ -455,12 +462,12 @@ namespace bridge {
     }
 
     void send_storage() {
-        const wchar_t* parts[][2] = {{L"play", L"unpacked"}, {L"avatars", L"avatars"}, {L"maps", L"maps"}, {L"webview", L"webview"}};
+        const wchar_t* parts[][2] = {{L"play", L"unpacked"}, {L"avatars", L"avatars"}, {L"maps", L"maps"}, {L"replays", L"replays"}, {L"webview", L"webview"}};
         uint64_t results = file_size(g_data + L"\\cache.txt") + file_size(g_data + L"\\profiles.txt") + file_size(g_data + L"\\perfs.txt");
         int stored = 3;
         results += dir_size(g_data + L"\\tracks", stored);
         std::string j = "{\"type\":\"storage\",\"items\":[{\"key\":\"results\",\"bytes\":" + std::to_string(results) + ",\"files\":" + std::to_string(stored) + "},";
-        for (size_t i = 0; i < 4; i++) {
+        for (size_t i = 0; i < std::size(parts); i++) {
             int files = 0;
             uint64_t bytes = dir_size(g_data + L"\\" + parts[i][0], files);
             if (i)
@@ -639,6 +646,8 @@ namespace bridge {
         tracks::init(data_dir + L"\\tracks");
         perfs::init(data_dir + L"\\perfs.txt");
         launch::init(data_dir + L"\\play");
+        replays::init(data_dir + L"\\replays");
+        clips::init(data_dir);
         return watch::init(all_folders());
     }
 
@@ -650,6 +659,10 @@ namespace bridge {
         tracks::cleanup();
         perfs::cleanup();
         launch::cleanup();
+        replays::cleanup();
+        exporter::cleanup();
+        clips::cleanup();
+        maps::cleanup();
         jobs::cleanup();
         profiles::cleanup();
     }
@@ -981,6 +994,145 @@ namespace bridge {
             launch::prepare_fix(*f);
     }
 
+    void cmd_replays(const json_t&) {
+        replays::refresh();
+    }
+
+    void cmd_replay_save(const json_t& j) {
+        std::vector<int> keep;
+        std::vector<std::pair<double, double>> cuts;
+        if (const json_t* k = json::at(j, "keep"); k && k->kind == jk_arr)
+            for (const json_t& v : k->arr)
+                keep.push_back((int)json::num(&v));
+        if (const json_t* c = json::at(j, "cuts"); c && c->kind == jk_arr)
+            for (const json_t& v : c->arr)
+                if (v.kind == jk_arr && v.arr.size() == 2)
+                    cuts.push_back({json::num(&v.arr[0]), json::num(&v.arr[1])});
+        replays::save(json::str(json::at(j, "id")), keep, cuts);
+    }
+
+    std::vector<std::wstring> paths_of(const json_t& j) {
+        std::vector<std::wstring> out;
+        if (const json_t* list = json::at(j, "paths"); list && list->kind == jk_arr)
+            for (const json_t& v : list->arr)
+                out.push_back(text::wide(json::str(&v)));
+        std::string one = json::str(json::at(j, "path"));
+        if (!one.empty())
+            out.push_back(text::wide(one));
+        return out;
+    }
+
+    void cmd_clip_make(const json_t& j) {
+        exporter::job_t job;
+        job.id = json::str(json::at(j, "id"));
+        job.dir = replays::video_dir(json::str(json::at(j, "video")));
+        job.from = json::num(json::at(j, "from"));
+        job.to = json::num(json::at(j, "to"));
+        job.width = (int)json::num(json::at(j, "width"));
+        job.height = (int)json::num(json::at(j, "height"));
+        job.fps = std::clamp((int)json::num(json::at(j, "fps"), 60), 10, 60);
+        job.bitrate = std::clamp((int)json::num(json::at(j, "bitrate"), 12000000), 200000, 80000000);
+        job.max_bytes = (uint64_t)json::num(json::at(j, "max_bytes"));
+        std::wstring dir = clips::dir();
+        if (job.id.empty() || job.dir.empty() || dir.empty() || job.to <= job.from) {
+            web::post("{\"type\":\"clip_done\",\"id\":\"" + json::escape(job.id) + "\",\"ok\":false,\"path\":\"\",\"bytes\":0,\"err\":\"bad clip\"}");
+            return;
+        }
+        std::wstring base = dir + L"\\" + clips::file_name(json::str(json::at(j, "name")));
+        job.out = base + L".mp4";
+        for (int n = 2; GetFileAttributesW(job.out.c_str()) != INVALID_FILE_ATTRIBUTES; n++)
+            job.out = base + L" (" + std::to_wstring(n) + L").mp4";
+        clips::write_meta(job.out, json::str(json::at(j, "match")), json::str(json::at(j, "map")), json::str(json::at(j, "tag")), job.from, job.to);
+        exporter::add(job);
+    }
+
+    void cmd_clips(const json_t&) {
+        clips::list();
+    }
+
+    void cmd_clip_delete(const json_t& j) {
+        clips::remove(paths_of(j));
+    }
+
+    void cmd_clip_cancel(const json_t& j) {
+        exporter::cancel(json::str(json::at(j, "id")));
+    }
+
+    void cmd_clip_copy(const json_t& j) {
+        clips::copy(paths_of(j));
+    }
+
+    void cmd_clip_rename(const json_t& j) {
+        clips::rename(text::wide(json::str(json::at(j, "path"))), json::str(json::at(j, "name")));
+    }
+
+    void cmd_clip_fav(const json_t& j) {
+        const json_t* on = json::at(j, "on");
+        clips::favourite(text::wide(json::str(json::at(j, "path"))), on && on->kind == jk_bool && on->b);
+    }
+
+    void cmd_clip_show(const json_t& j) {
+        std::wstring path = text::wide(json::str(json::at(j, "path")));
+        if (clips::inside(path))
+            reveal(text::utf8(path));
+        else if (path.empty() && !clips::dir().empty())
+            ShellExecuteW(window::handle(), L"open", clips::dir().c_str(), nullptr, nullptr, SW_SHOWNORMAL);
+    }
+
+    void cmd_replay_chunks(const json_t& j) {
+        replays::table(json::str(json::at(j, "id")));
+    }
+
+    void cmd_replay_delete(const json_t& j) {
+        replays::remove(json::str(json::at(j, "id")), true);
+    }
+
+    void cmd_replay_pin(const json_t& j) {
+        replays::pin(json::str(json::at(j, "id")));
+    }
+
+    void cmd_replay_keep(const json_t& j) {
+        replays::set_keep((int)json::num(json::at(j, "n"), 6));
+    }
+
+    void cmd_player_open(const json_t& j) {
+        std::wstring dir = replays::video_dir(json::str(json::at(j, "video")));
+        if (!dir.empty())
+            player::open(dir, json::num(json::at(j, "t")));
+    }
+
+    void cmd_player_play(const json_t&) {
+        player::play();
+    }
+
+    void cmd_player_pause(const json_t&) {
+        player::pause();
+    }
+
+    void cmd_player_seek(const json_t& j) {
+        player::seek(json::num(json::at(j, "t")));
+    }
+
+    void cmd_player_volume(const json_t& j) {
+        audio::volume((float)json::num(json::at(j, "v")));
+    }
+
+    void cmd_player_close(const json_t&) {
+        player::close();
+    }
+
+    void cmd_player_rate(const json_t& j) {
+        player::rate(json::num(json::at(j, "v")));
+    }
+
+    void cmd_player_step(const json_t& j) {
+        player::step(json::num(json::at(j, "d")) < 0 ? -1 : 1);
+    }
+
+    void cmd_player_rect(const json_t& j) {
+        player::place(json::num(json::at(j, "x")), json::num(json::at(j, "y")), json::num(json::at(j, "w")), json::num(json::at(j, "h")));
+    }
+
     typedef void (*cmd_fn_t)(const json_t&);
 
     struct command_t {
@@ -1026,6 +1178,29 @@ namespace bridge {
         {"update_install", cmd_update_install},
         {"reveal", cmd_reveal},
         {"fix_demo", cmd_fix_demo},
+        {"replays", cmd_replays},
+        {"replay_save", cmd_replay_save},
+        {"clip_make", cmd_clip_make},
+        {"clip_cancel", cmd_clip_cancel},
+        {"clip_copy", cmd_clip_copy},
+        {"clip_show", cmd_clip_show},
+        {"clips", cmd_clips},
+        {"clip_delete", cmd_clip_delete},
+        {"clip_rename", cmd_clip_rename},
+        {"clip_fav", cmd_clip_fav},
+        {"replay_chunks", cmd_replay_chunks},
+        {"replay_delete", cmd_replay_delete},
+        {"replay_pin", cmd_replay_pin},
+        {"replay_keep", cmd_replay_keep},
+        {"player_open", cmd_player_open},
+        {"player_play", cmd_player_play},
+        {"player_pause", cmd_player_pause},
+        {"player_seek", cmd_player_seek},
+        {"player_close", cmd_player_close},
+        {"player_rate", cmd_player_rate},
+        {"player_step", cmd_player_step},
+        {"player_volume", cmd_player_volume},
+        {"player_rect", cmd_player_rect},
     };
 
     cmd_fn_t command_for(std::string_view name) {
@@ -1044,9 +1219,13 @@ namespace bridge {
         }
         std::string_view type = json::view(json::at(j, "type"));
         cmd_fn_t run = command_for(type);
-        if (run)
+        if (run) {
+            auto t0 = std::chrono::steady_clock::now();
             run(j);
-        else
+            double ms = std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - t0).count();
+            if (ms > SLOW_COMMAND_MS)
+                dbg::print("[bridge] %.*s took %.0f ms", (int)type.size(), type.data(), ms);
+        } else
             dbg::print("[bridge] unknown message %.*s", (int)type.size(), type.data());
     }
 }

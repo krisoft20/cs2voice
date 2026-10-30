@@ -2,12 +2,15 @@
 
 #include <shellapi.h>
 #include <shlwapi.h>
+#include <windowsx.h>
 #include <wrl.h>
 
 #include "WebView2.h"
 #include "bridge/bridge.h"
+#include "bridge/clips.h"
 #include "dbg.h"
 #include "json/json.h"
+#include "platform/compose.h"
 #include "platform/net.h"
 #include "text.h"
 #include "web/web.h"
@@ -18,10 +21,16 @@ namespace web {
     const wchar_t* HOST = L"cs2voice.example";
     const wchar_t* MAPS_HOST = L"cs2voice-maps.example";
     const wchar_t* AVATARS_HOST = L"cs2voice-avatars.example";
+    const wchar_t* CLIPS_HOST = L"cs2voice-clips.example";
+    const long long CLIP_SLICE = 4 << 20;
 
     HWND g_hwnd = nullptr;
     ICoreWebView2Environment* g_env = nullptr;
     ICoreWebView2Controller* g_ctl = nullptr;
+    ICoreWebView2CompositionController* g_comp = nullptr;
+    ICoreWebView2CompositionController4* g_comp4 = nullptr;
+    HCURSOR g_cursor = nullptr;
+    bool g_tracking = false;
     ICoreWebView2* g_view = nullptr;
     std::map<std::wstring, int> g_files;
     std::wstring g_dev_url;
@@ -101,7 +110,7 @@ namespace web {
     const wchar_t* mime(const std::wstring& path) {
         static const std::pair<const wchar_t*, const wchar_t*> types[] = {
             {L".html", L"text/html"}, {L".js", L"text/javascript"}, {L".css", L"text/css"}, {L".woff2", L"font/woff2"},
-            {L".woff", L"font/woff"}, {L".svg", L"image/svg+xml"}, {L".png", L"image/png"}, {L".json", L"application/json"},
+            {L".woff", L"font/woff"}, {L".svg", L"image/svg+xml"}, {L".png", L"image/png"}, {L".jpg", L"image/jpeg"}, {L".json", L"application/json"},
         };
         for (auto& [ext, type] : types) {
             size_t n = wcslen(ext);
@@ -109,6 +118,110 @@ namespace web {
                 return type;
         }
         return L"application/octet-stream";
+    }
+
+    bool data_file(ICoreWebView2WebResourceRequestedEventArgs* args, const std::wstring& uri, const wchar_t* host, const wchar_t* dir) {
+        std::wstring prefix = std::wstring(L"https://") + host + L"/";
+        if (uri.compare(0, prefix.size(), prefix) != 0)
+            return false;
+        std::wstring path = uri.substr(prefix.size());
+        path = path.substr(0, path.find_first_of(L"?#"));
+        IStream* body = nullptr;
+        if (!path.empty() && path.find(L"..") == std::wstring::npos &&
+            path.find_first_not_of(L"abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_-./") == std::wstring::npos) {
+            std::replace(path.begin(), path.end(), L'/', L'\\');
+            SHCreateStreamOnFileEx((g_data_dir + L"\\" + dir + L"\\" + path).c_str(), STGM_READ | STGM_SHARE_DENY_NONE, 0, FALSE, nullptr, &body);
+        }
+        ICoreWebView2WebResourceResponse* resp = nullptr;
+        if (body) {
+            std::wstring headers = std::wstring(L"Content-Type: ") + mime(path) + L"\r\nCache-Control: max-age=86400\r\nAccess-Control-Allow-Origin: *";
+            g_env->CreateWebResourceResponse(body, 200, L"OK", headers.c_str(), &resp);
+            body->Release();
+        } else {
+            g_env->CreateWebResourceResponse(nullptr, 404, L"Not Found", L"", &resp);
+        }
+        if (resp) {
+            args->put_Response(resp);
+            resp->Release();
+        }
+        return true;
+    }
+
+    std::string url_decode(const std::string& s) {
+        std::string out;
+        for (size_t i = 0; i < s.size(); i++) {
+            if (s[i] == '%' && i + 2 < s.size() && isxdigit((unsigned char)s[i + 1]) && isxdigit((unsigned char)s[i + 2])) {
+                out += (char)strtol(s.substr(i + 1, 2).c_str(), nullptr, 16);
+                i += 2;
+            } else {
+                out += s[i];
+            }
+        }
+        return out;
+    }
+
+    bool clip_file(ICoreWebView2WebResourceRequestedEventArgs* args, ICoreWebView2WebResourceRequest* req, const std::wstring& uri) {
+        std::wstring prefix = std::wstring(L"https://") + CLIPS_HOST + L"/";
+        if (uri.compare(0, prefix.size(), prefix) != 0)
+            return false;
+        std::string enc = text::utf8(uri.substr(prefix.size()));
+        std::wstring name = text::wide(url_decode(enc.substr(0, enc.find_first_of("?#"))));
+        std::wstring dir = clips::dir();
+        const wchar_t* ext = L".mp4";
+        if (name.compare(0, 6, L"thumb/") == 0) {
+            name = name.substr(6);
+            dir = clips::meta_dir();
+            ext = L".jpg";
+        }
+        bool ok = !dir.empty() && name.size() > 4 && name.compare(name.size() - 4, 4, ext) == 0 && name.find_first_of(L"\\/:") == std::wstring::npos &&
+                  name.find(L"..") == std::wstring::npos;
+        HANDLE f = ok ? CreateFileW((dir + L"\\" + name).c_str(), GENERIC_READ, FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE, nullptr, OPEN_EXISTING, 0, nullptr)
+                      : INVALID_HANDLE_VALUE;
+        LARGE_INTEGER size = {};
+        ICoreWebView2WebResourceResponse* resp = nullptr;
+        if (f != INVALID_HANDLE_VALUE && GetFileSizeEx(f, &size) && size.QuadPart > 0) {
+            long long total = size.QuadPart, from = 0, to = total - 1;
+            bool partial = false;
+            ICoreWebView2HttpRequestHeaders* headers = nullptr;
+            LPWSTR range = nullptr;
+            if (SUCCEEDED(req->get_Headers(&headers)) && SUCCEEDED(headers->GetHeader(L"Range", &range)) && range) {
+                long long a = -1, b = -1;
+                if (swscanf(range, L"bytes=%lld-%lld", &a, &b) >= 1 && a >= 0 && a < total) {
+                    from = a;
+                    to = b >= a && b < total ? b : total - 1;
+                    partial = true;
+                }
+                CoTaskMemFree(range);
+            }
+            if (headers)
+                headers->Release();
+            to = std::min(to, from + CLIP_SLICE - 1);
+            std::vector<uint8_t> buf((size_t)(to - from + 1));
+            LARGE_INTEGER pos;
+            pos.QuadPart = from;
+            DWORD got = 0;
+            if (SetFilePointerEx(f, pos, nullptr, FILE_BEGIN) && ReadFile(f, buf.data(), (DWORD)buf.size(), &got, nullptr) && got) {
+                IStream* body = SHCreateMemStream(buf.data(), got);
+                wchar_t head[256];
+                if (wcscmp(ext, L".jpg") == 0)
+                    swprintf(head, 256, L"Content-Type: image/jpeg\r\nCache-Control: max-age=31536000");
+                else
+                    swprintf(head, 256, L"Content-Type: video/mp4\r\nAccept-Ranges: bytes\r\nContent-Range: bytes %lld-%lld/%lld\r\nContent-Length: %lu", from,
+                             from + got - 1, total, got);
+                g_env->CreateWebResourceResponse(body, partial || got < total ? 206 : 200, partial || got < total ? L"Partial Content" : L"OK", head, &resp);
+                if (body)
+                    body->Release();
+            }
+        }
+        if (f != INVALID_HANDLE_VALUE)
+            CloseHandle(f);
+        if (!resp)
+            g_env->CreateWebResourceResponse(nullptr, 404, L"Not Found", L"", &resp);
+        if (resp) {
+            args->put_Response(resp);
+            resp->Release();
+        }
+        return true;
     }
 
     void on_request(ICoreWebView2WebResourceRequestedEventArgs* args) {
@@ -121,7 +234,10 @@ namespace web {
         }
         std::wstring path = uri;
         CoTaskMemFree(uri);
+        bool clip = clip_file(args, req, path);
         req->Release();
+        if (clip || data_file(args, path, MAPS_HOST, L"maps") || data_file(args, path, AVATARS_HOST, L"avatars"))
+            return;
         size_t host = path.find(HOST);
         path = host == std::wstring::npos ? L"/" : path.substr(host + wcslen(HOST));
         path = path.substr(0, path.find_first_of(L"?#"));
@@ -181,14 +297,17 @@ namespace web {
         if (g_dev_url.empty()) {
             load_files();
             g_view->AddWebResourceRequestedFilter((std::wstring(L"https://") + HOST + L"/*").c_str(), COREWEBVIEW2_WEB_RESOURCE_CONTEXT_ALL);
-            g_view->add_WebResourceRequested(Callback<ICoreWebView2WebResourceRequestedEventHandler>(
-                                                 [](ICoreWebView2*, ICoreWebView2WebResourceRequestedEventArgs* args) -> HRESULT {
-                                                     on_request(args);
-                                                     return S_OK;
-                                                 })
-                                                 .Get(),
-                                             &token);
         }
+        g_view->AddWebResourceRequestedFilter((std::wstring(L"https://") + MAPS_HOST + L"/*").c_str(), COREWEBVIEW2_WEB_RESOURCE_CONTEXT_ALL);
+        g_view->AddWebResourceRequestedFilter((std::wstring(L"https://") + AVATARS_HOST + L"/*").c_str(), COREWEBVIEW2_WEB_RESOURCE_CONTEXT_ALL);
+        g_view->AddWebResourceRequestedFilter((std::wstring(L"https://") + CLIPS_HOST + L"/*").c_str(), COREWEBVIEW2_WEB_RESOURCE_CONTEXT_ALL);
+        g_view->add_WebResourceRequested(Callback<ICoreWebView2WebResourceRequestedEventHandler>(
+                                             [](ICoreWebView2*, ICoreWebView2WebResourceRequestedEventArgs* args) -> HRESULT {
+                                                 on_request(args);
+                                                 return S_OK;
+                                             })
+                                             .Get(),
+                                         &token);
         g_view->add_NavigationCompleted(Callback<ICoreWebView2NavigationCompletedEventHandler>(
                                             [](ICoreWebView2*, ICoreWebView2NavigationCompletedEventArgs*) -> HRESULT {
                                                 dbg::print("[web] page loaded");
@@ -196,14 +315,6 @@ namespace web {
                                             })
                                             .Get(),
                                         &token);
-        ICoreWebView2_3* v3 = nullptr;
-        if (FAILED(g_view->QueryInterface(IID_PPV_ARGS(&v3)))) {
-            dbg::print("[-] webview2 runtime too old for folder mapping");
-            return;
-        }
-        v3->SetVirtualHostNameToFolderMapping(MAPS_HOST, (g_data_dir + L"\\maps").c_str(), COREWEBVIEW2_HOST_RESOURCE_ACCESS_KIND_ALLOW);
-        v3->SetVirtualHostNameToFolderMapping(AVATARS_HOST, (g_data_dir + L"\\avatars").c_str(), COREWEBVIEW2_HOST_RESOURCE_ACCESS_KIND_ALLOW);
-        v3->Release();
         std::wstring url = g_dev_url.empty() ? std::wstring(L"https://") + HOST + L"/index.html" : g_dev_url;
         if (!g_page.empty())
             url += L"#" + g_page;
@@ -219,7 +330,7 @@ namespace web {
         g_ctl->AddRef();
         ICoreWebView2Controller2* c2 = nullptr;
         if (SUCCEEDED(g_ctl->QueryInterface(IID_PPV_ARGS(&c2)))) {
-            COREWEBVIEW2_COLOR bg = {255, 14, 15, 18};
+            COREWEBVIEW2_COLOR bg = {g_comp ? (BYTE)0 : (BYTE)255, 14, 15, 18};
             c2->put_DefaultBackgroundColor(bg);
             c2->Release();
         }
@@ -229,6 +340,43 @@ namespace web {
         if (!g_shot.empty())
             SetTimer(g_hwnd, SHOT_TIMER, g_shot_delay, on_timer);
         dbg::print("[web] ready");
+        return S_OK;
+    }
+
+    HRESULT windowed() {
+        dbg::print("[web] windowed hosting");
+        return g_env->CreateCoreWebView2Controller(
+            g_hwnd, Callback<ICoreWebView2CreateCoreWebView2ControllerCompletedHandler>(on_controller).Get());
+    }
+
+    void update_cursor() {
+        HCURSOR c = nullptr;
+        if (g_comp && SUCCEEDED(g_comp->get_Cursor(&c)) && c)
+            g_cursor = c;
+    }
+
+    HRESULT on_composition(HRESULT hr, ICoreWebView2CompositionController* cc) {
+        if (FAILED(hr) || !cc || FAILED(cc->put_RootVisualTarget(compose::web_visual()))) {
+            dbg::print("[-] composition controller failed 0x%08lx", hr);
+            return windowed();
+        }
+        g_comp = cc;
+        g_comp->AddRef();
+        g_comp->QueryInterface(IID_PPV_ARGS(&g_comp4));
+        compose::commit();
+        EventRegistrationToken token;
+        g_comp->add_CursorChanged(Callback<ICoreWebView2CursorChangedEventHandler>([](ICoreWebView2CompositionController*, IUnknown*) -> HRESULT {
+                                      update_cursor();
+                                      SetCursor(g_cursor);
+                                      return S_OK;
+                                  }).Get(),
+                                  &token);
+        ICoreWebView2Controller* ctl = nullptr;
+        g_comp->QueryInterface(IID_PPV_ARGS(&ctl));
+        dbg::print("[web] composition hosting");
+        on_controller(S_OK, ctl);
+        if (ctl)
+            ctl->Release();
         return S_OK;
     }
 
@@ -243,8 +391,15 @@ namespace web {
         g_env = env;
         g_env->AddRef();
         dbg::print("[web] environment");
-        return g_env->CreateCoreWebView2Controller(
-            g_hwnd, Callback<ICoreWebView2CreateCoreWebView2ControllerCompletedHandler>(on_controller).Get());
+        ICoreWebView2Environment3* env3 = nullptr;
+        if (compose::web_visual() && SUCCEEDED(g_env->QueryInterface(IID_PPV_ARGS(&env3)))) {
+            hr = env3->CreateCoreWebView2CompositionController(
+                g_hwnd, Callback<ICoreWebView2CreateCoreWebView2CompositionControllerCompletedHandler>(on_composition).Get());
+            env3->Release();
+            if (SUCCEEDED(hr))
+                return S_OK;
+        }
+        return windowed();
     }
 
     void fetch_next();
@@ -391,6 +546,7 @@ namespace web {
         g_hwnd = hwnd;
         g_data_dir = data_dir;
         g_dev_url = dev_url;
+        compose::init(hwnd);
         HRESULT hr = CreateCoreWebView2EnvironmentWithOptions(
             nullptr, profile_dir.c_str(), nullptr, Callback<ICoreWebView2CreateCoreWebView2EnvironmentCompletedHandler>(on_environment).Get());
         if (FAILED(hr)) {
@@ -409,11 +565,18 @@ namespace web {
             g_ctl->Close();
             g_ctl->Release();
         }
+        if (g_comp4)
+            g_comp4->Release();
+        if (g_comp)
+            g_comp->Release();
         if (g_env)
             g_env->Release();
         g_view = nullptr;
         g_ctl = nullptr;
+        g_comp4 = nullptr;
+        g_comp = nullptr;
         g_env = nullptr;
+        compose::cleanup();
     }
 
     void resize() {
@@ -422,6 +585,78 @@ namespace web {
         RECT r;
         GetClientRect(g_hwnd, &r);
         g_ctl->put_Bounds(r);
+    }
+
+    bool mouse(UINT msg, WPARAM wp, LPARAM lp) {
+        if (!g_comp)
+            return false;
+        POINT pt = {GET_X_LPARAM(lp), GET_Y_LPARAM(lp)};
+        UINT32 data = 0;
+        UINT keys = GET_KEYSTATE_WPARAM(wp);
+        const UINT BUTTONS = MK_LBUTTON | MK_RBUTTON | MK_MBUTTON | MK_XBUTTON1 | MK_XBUTTON2;
+        switch (msg) {
+        case WM_MOUSEMOVE:
+            if (!g_tracking) {
+                TRACKMOUSEEVENT t = {sizeof(t), TME_LEAVE, g_hwnd, 0};
+                g_tracking = TrackMouseEvent(&t) != FALSE;
+            }
+            break;
+        case WM_MOUSELEAVE:
+            g_tracking = false;
+            pt = {};
+            keys = 0;
+            break;
+        case WM_LBUTTONDOWN:
+        case WM_RBUTTONDOWN:
+        case WM_MBUTTONDOWN:
+        case WM_XBUTTONDOWN:
+            SetCapture(g_hwnd);
+            break;
+        case WM_LBUTTONUP:
+        case WM_RBUTTONUP:
+        case WM_MBUTTONUP:
+        case WM_XBUTTONUP:
+            if (!(keys & BUTTONS))
+                ReleaseCapture();
+            break;
+        case WM_MOUSEWHEEL:
+        case WM_MOUSEHWHEEL:
+            ScreenToClient(g_hwnd, &pt);
+            data = (UINT32)(int32_t)GET_WHEEL_DELTA_WPARAM(wp);
+            break;
+        case WM_LBUTTONDBLCLK:
+        case WM_RBUTTONDBLCLK:
+        case WM_MBUTTONDBLCLK:
+        case WM_XBUTTONDBLCLK:
+            break;
+        default:
+            return false;
+        }
+        if (msg == WM_XBUTTONDOWN || msg == WM_XBUTTONUP || msg == WM_XBUTTONDBLCLK)
+            data = GET_XBUTTON_WPARAM(wp);
+        g_comp->SendMouseInput((COREWEBVIEW2_MOUSE_EVENT_KIND)msg, (COREWEBVIEW2_MOUSE_EVENT_VIRTUAL_KEYS)keys, data, pt);
+        return true;
+    }
+
+    bool cursor() {
+        if (!g_comp)
+            return false;
+        if (!g_cursor)
+            update_cursor();
+        SetCursor(g_cursor ? g_cursor : LoadCursorW(nullptr, IDC_ARROW));
+        return true;
+    }
+
+    int hit(POINT client) {
+        COREWEBVIEW2_NON_CLIENT_REGION_KIND kind = COREWEBVIEW2_NON_CLIENT_REGION_KIND_CLIENT;
+        if (!g_comp4 || FAILED(g_comp4->GetNonClientRegionAtPoint(client, &kind)))
+            return 0;
+        return kind == COREWEBVIEW2_NON_CLIENT_REGION_KIND_CAPTION ? HTCAPTION : 0;
+    }
+
+    void focus() {
+        if (g_ctl)
+            g_ctl->MoveFocus(COREWEBVIEW2_MOVE_FOCUS_REASON_PROGRAMMATIC);
     }
 
     void screenshot(const std::wstring& path, const std::wstring& page, UINT delay_ms) {

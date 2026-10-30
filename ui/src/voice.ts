@@ -45,15 +45,27 @@ export const mapName = (map: string, t: T) => {
   return m ? m[0].toUpperCase() + m.slice(1) : t('unknownMap')
 }
 
+const formats = new Map<string, Intl.DateTimeFormat>()
+
+const format = (lang: Lang, kind: 'time' | 'date') => {
+  const key = `${lang}|${kind}`
+  let f = formats.get(key)
+  if (!f) {
+    f = new Intl.DateTimeFormat(lang, kind === 'time' ? { hour: '2-digit', minute: '2-digit' } : { day: 'numeric', month: 'short' })
+    formats.set(key, f)
+  }
+  return f
+}
+
 export const when = (unix: number, t: T, lang: Lang) => {
   const d = new Date(unix * 1000)
   const now = new Date()
-  const time = d.toLocaleTimeString(lang, { hour: '2-digit', minute: '2-digit' })
+  const time = format(lang, 'time').format(d)
   const day = (x: Date) => new Date(x.getFullYear(), x.getMonth(), x.getDate()).getTime()
   const diff = Math.round((day(now) - day(d)) / 86400000)
   if (diff === 0) return t('today', { t: time })
   if (diff === 1) return t('yesterday', { t: time })
-  return `${d.toLocaleDateString(lang, { day: 'numeric', month: 'short' })}, ${time}`
+  return `${format(lang, 'date').format(d)}, ${time}`
 }
 
 export const length = (seconds: number, t: T) => t('minutes', { n: Math.floor(seconds / 60) })

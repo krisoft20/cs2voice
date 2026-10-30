@@ -110,3 +110,48 @@ export const Speaker = (props: { on: boolean }) => (
     {props.on && <path d="M15 8a5 5 0 0 1 0 8M17.7 5a9 9 0 0 1 0 14" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />}
   </svg>
 )
+
+
+export const PauseIcon = tabler(["M6 5m0 1a1 1 0 0 1 1 -1h2a1 1 0 0 1 1 1v12a1 1 0 0 1 -1 1h-2a1 1 0 0 1 -1 -1z", "M14 5m0 1a1 1 0 0 1 1 -1h2a1 1 0 0 1 1 1v12a1 1 0 0 1 -1 1h-2a1 1 0 0 1 -1 -1z"])
+
+export const SkipBackIcon = tabler(["M20 5v14l-12 -7z", "M4 5l0 14"])
+
+export const SkipForwardIcon = tabler(["M4 5v14l12 -7z", "M20 5l0 14"])
+
+export const SkullIcon = tabler(["M12 4c4.418 0 8 3.358 8 7.5c0 1.901 -.755 3.637 -2 4.96l0 2.54a1 1 0 0 1 -1 1h-10a1 1 0 0 1 -1 -1v-2.54c-1.245 -1.322 -2 -3.058 -2 -4.96c0 -4.142 3.582 -7.5 8 -7.5z", "M10 17v3", "M14 17v3", "M9 11m-1 0a1 1 0 1 0 2 0a1 1 0 1 0 -2 0", "M15 11m-1 0a1 1 0 1 0 2 0a1 1 0 1 0 -2 0"])
+
+export const BookmarkIcon = tabler(["M18 7v14l-6 -4l-6 4v-14a4 4 0 0 1 4 -4h4a4 4 0 0 1 4 4z"])
+
+export const VolumeIcon = tabler(["M15 8a5 5 0 0 1 0 8", "M17.7 5a9 9 0 0 1 0 14", "M6 15h-2a1 1 0 0 1 -1 -1v-4a1 1 0 0 1 1 -1h2l3.5 -4.5a.8 .8 0 0 1 1.5 .5v14a.8 .8 0 0 1 -1.5 .5l-3.5 -4.5"])
+
+export const MuteIcon = tabler(["M6 15h-2a1 1 0 0 1 -1 -1v-4a1 1 0 0 1 1 -1h2l3.5 -4.5a.8 .8 0 0 1 1.5 .5v14a.8 .8 0 0 1 -1.5 .5l-3.5 -4.5", "M16 10l4 4m0 -4l-4 4"])
+
+export const ExpandIcon = tabler(["M4 8v-2a2 2 0 0 1 2 -2h2", "M4 16v2a2 2 0 0 0 2 2h2", "M16 4h2a2 2 0 0 1 2 2v2", "M16 20h2a2 2 0 0 0 2 -2v-2"])
+
+export const ShrinkIcon = tabler(["M15 19v-2a2 2 0 0 1 2 -2h2", "M15 5v2a2 2 0 0 0 2 2h2", "M5 15h2a2 2 0 0 1 2 2v2", "M5 9h2a2 2 0 0 0 2 -2v-2"])
+
+export const PanelIcon = tabler(["M4 4m0 2a2 2 0 0 1 2 -2h12a2 2 0 0 1 2 2v12a2 2 0 0 1 -2 2h-12a2 2 0 0 1 -2 -2z", "M15 4l0 16"])
+
+export const AspectIcon = tabler(["M3 5m0 2a2 2 0 0 1 2 -2h14a2 2 0 0 1 2 2v10a2 2 0 0 1 -2 2h-14a2 2 0 0 1 -2 -2z", "M7 12v-3h3", "M17 12v3h-3"])
+
+export const DotsIcon = tabler(["M12 12m-1 0a1 1 0 1 0 2 0a1 1 0 1 0 -2 0", "M12 19m-1 0a1 1 0 1 0 2 0a1 1 0 1 0 -2 0", "M12 5m-1 0a1 1 0 1 0 2 0a1 1 0 1 0 -2 0"])
+
+export const StepBackIcon = tabler(["M16 6v12l-9 -6z"])
+
+export const StepForwardIcon = tabler(["M8 6v12l9 -6z"])
+
+export const StarIcon = tabler(["M12 17.75l-6.172 3.245l1.179 -6.873l-5 -4.867l6.9 -1l3.086 -6.253l3.086 6.253l6.9 1l-5 4.867l1.179 6.873z"])
+
+export const SaveIcon = tabler(["M4 17v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2 -2v-2", "M7 11l5 5l5 -5", "M12 4l0 12"])
+
+export const DemoFileIcon = tabler(["M14 3v4a1 1 0 0 0 1 1h4", "M17 21h-10a2 2 0 0 1 -2 -2v-14a2 2 0 0 1 2 -2h7l5 5v11a2 2 0 0 1 -2 2z", "M9 14v3", "M12 12v7", "M15 13.5v4"])
+
+export const VideoIcon = tabler(["M15 10l4.553 -2.276a1 1 0 0 1 1.447 .894v6.764a1 1 0 0 1 -1.447 .894l-4.553 -2.276v-4z", "M3 6m0 2a2 2 0 0 1 2 -2h8a2 2 0 0 1 2 2v8a2 2 0 0 1 -2 2h-8a2 2 0 0 1 -2 -2z"])
+
+export const ScissorsIcon = tabler(["M6 7m-3 0a3 3 0 1 0 6 0a3 3 0 1 0 -6 0", "M6 17m-3 0a3 3 0 1 0 6 0a3 3 0 1 0 -6 0", "M8.6 8.6l10.4 10.4", "M8.6 15.4l10.4 -10.4"])
+
+export const CopyIcon = tabler(["M7 7m0 2.667a2.667 2.667 0 0 1 2.667 -2.667h8.666a2.667 2.667 0 0 1 2.667 2.667v8.666a2.667 2.667 0 0 1 -2.667 2.667h-8.666a2.667 2.667 0 0 1 -2.667 -2.667z", "M4.012 16.737a2.005 2.005 0 0 1 -1.012 -1.737v-10c0 -1.1 .9 -2 2 -2h10c.75 0 1.158 .385 1.5 1"])
+
+export const TrashIcon = tabler(["M4 7l16 0", "M10 11l0 6", "M14 11l0 6", "M5 7l1 12a2 2 0 0 0 2 2h8a2 2 0 0 0 2 -2l1 -12", "M9 7v-3a1 1 0 0 1 1 -1h4a1 1 0 0 1 1 1v3"])
+
+export const ClipIcon = tabler(["M4 10h16v9a1 1 0 0 1 -1 1h-14a1 1 0 0 1 -1 -1z", "M4 10l-.6 -3.2a1 1 0 0 1 .8 -1.17l13.7 -2.5a1 1 0 0 1 1.16 .8l.6 3.2z", "M8.2 5l2.6 3.6", "M13.2 4.1l2.6 3.6"])

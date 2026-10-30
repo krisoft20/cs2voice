@@ -2,6 +2,7 @@
 
 #include <dwmapi.h>
 #include <shellapi.h>
+#include <windowsx.h>
 
 #include "bridge/bridge.h"
 #include "dbg.h"
@@ -22,6 +23,8 @@ namespace window {
     UINT g_taskbar = 0;
     std::wstring g_open_text = L"Open cs2voice";
     std::wstring g_quit_text = L"Quit";
+    bool g_full = false;
+    WINDOWPLACEMENT g_place = {sizeof(WINDOWPLACEMENT)};
 
     int frame_y(HWND hwnd) {
         UINT dpi = GetDpiForWindow(hwnd);
@@ -94,7 +97,29 @@ namespace window {
             tray_add();
             return 0;
         }
+        if (((msg >= WM_MOUSEFIRST && msg <= WM_MOUSELAST) || msg == WM_MOUSELEAVE) && web::mouse(msg, wp, lp))
+            return 0;
         switch (msg) {
+        case WM_SETCURSOR:
+            if (LOWORD(lp) == HTCLIENT && web::cursor())
+                return TRUE;
+            break;
+        case WM_NCHITTEST: {
+            LRESULT r = DefWindowProcW(hwnd, msg, wp, lp);
+            if (r != HTCLIENT)
+                return r;
+            POINT pt = {GET_X_LPARAM(lp), GET_Y_LPARAM(lp)};
+            ScreenToClient(hwnd, &pt);
+            if (g_full)
+                return HTCLIENT;
+            if (!IsZoomed(hwnd) && pt.y < frame_y(hwnd))
+                return HTTOP;
+            int h = web::hit(pt);
+            return h ? h : r;
+        }
+        case WM_SETFOCUS:
+            web::focus();
+            return 0;
         case WM_NCCALCSIZE: {
             if (!wp)
                 break;
@@ -106,7 +131,7 @@ namespace window {
         }
         case WM_SIZE:
             web::resize();
-            web::post(std::string("{\"type\":\"window\",\"maximized\":") + (IsZoomed(hwnd) ? "true" : "false") + "}");
+            web::post(std::string("{\"type\":\"window\",\"maximized\":") + (IsZoomed(hwnd) ? "true" : "false") + ",\"fullscreen\":" + (g_full ? "true" : "false") + "}");
             return 0;
         case WM_GETMINMAXINFO: {
             MINMAXINFO* mm = (MINMAXINFO*)lp;
@@ -129,6 +154,12 @@ namespace window {
         case WM_RESCAN:
             bridge::rescan();
             return 0;
+        case WM_UI_CALL: {
+            std::function<void()>* fn = (std::function<void()>*)lp;
+            (*fn)();
+            delete fn;
+            return 0;
+        }
         case WM_CLOSE:
             if (g_close == "tray") {
                 hide();
@@ -236,6 +267,27 @@ namespace window {
             delete b;
     }
 
+    void fullscreen(bool on) {
+        if (on == g_full)
+            return;
+        LONG style = GetWindowLongW(g_hwnd, GWL_STYLE);
+        if (on) {
+            MONITORINFO mi = {sizeof(mi)};
+            if (!GetWindowPlacement(g_hwnd, &g_place) || !GetMonitorInfoW(MonitorFromWindow(g_hwnd, MONITOR_DEFAULTTONEAREST), &mi))
+                return;
+            g_full = true;
+            SetWindowLongW(g_hwnd, GWL_STYLE, (style & ~WS_OVERLAPPEDWINDOW) | WS_POPUP);
+            SetWindowPos(g_hwnd, HWND_TOP, mi.rcMonitor.left, mi.rcMonitor.top, mi.rcMonitor.right - mi.rcMonitor.left, mi.rcMonitor.bottom - mi.rcMonitor.top,
+                         SWP_NOOWNERZORDER | SWP_FRAMECHANGED);
+        } else {
+            g_full = false;
+            SetWindowLongW(g_hwnd, GWL_STYLE, (style & ~WS_POPUP) | WS_OVERLAPPEDWINDOW);
+            SetWindowPlacement(g_hwnd, &g_place);
+            SetWindowPos(g_hwnd, nullptr, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER | SWP_NOOWNERZORDER | SWP_FRAMECHANGED);
+        }
+        web::post(std::string("{\"type\":\"window\",\"maximized\":") + (IsZoomed(g_hwnd) ? "true" : "false") + ",\"fullscreen\":" + (g_full ? "true" : "false") + "}");
+    }
+
     void command(const std::string& action) {
         if (action == "minimize")
             ShowWindow(g_hwnd, SW_MINIMIZE);
@@ -249,6 +301,8 @@ namespace window {
             PostMessageW(g_hwnd, WM_QUIT_APP, 0, 0);
         else if (action == "stay")
             g_asking = false;
+        else if (action == "fullscreen" || action == "windowed")
+            fullscreen(action == "fullscreen");
         if (action == "tray" || action == "quit")
             g_asking = false;
     }
@@ -268,6 +322,12 @@ namespace window {
 
     void post_rescan() {
         PostMessageW(g_hwnd, WM_RESCAN, 0, 0);
+    }
+
+    void on_ui(std::function<void()> fn) {
+        std::function<void()>* copy = new std::function<void()>(std::move(fn));
+        if (!PostMessageW(g_hwnd, WM_UI_CALL, 0, (LPARAM)copy))
+            delete copy;
     }
 
     bool pump() {
