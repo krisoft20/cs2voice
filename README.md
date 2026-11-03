@@ -1,6 +1,8 @@
 # cs2voice
 
-A Windows app for Counter-Strike 2 demos. It finds the demos on your PC, plays each player's voice chat, and shows the match: stats, rounds, a 2D radar replay, crosshairs and skins.
+A Windows app for CS2 voice chat in demos. It finds the Counter-Strike 2 demos on your PC, plays each player's voice chat, and shows the match: stats, rounds, a 2D radar replay, Steam recordings, clips, crosshairs and skins.
+
+Website: https://krisoft20.github.io/cs2voice/
 
 ## Download
 
