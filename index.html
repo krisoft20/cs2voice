@@ -1,0 +1,436 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>cs2voice: voice chat, radar and replays from your CS2 demos</title>
+<meta name="description" content="Free Windows app for Counter-Strike 2 demos. Hear every player's voice chat, replay rounds on a 2D radar, watch Steam recordings lined up with the demo and cut clips for Discord. Your demos never leave your PC.">
+<link rel="canonical" href="https://krisoft20.github.io/cs2voice/">
+<link rel="icon" href="favicon.ico">
+<meta name="theme-color" content="#14181e">
+<meta property="og:type" content="website">
+<meta property="og:title" content="cs2voice: voice chat, radar and replays from your CS2 demos">
+<meta property="og:description" content="Free Windows app. Hear every player's voice from a CS2 demo, round by round. Nothing is uploaded.">
+<meta property="og:url" content="https://krisoft20.github.io/cs2voice/">
+<meta property="og:image" content="https://krisoft20.github.io/cs2voice/img/og.png">
+<meta name="twitter:card" content="summary_large_image">
+<link rel="preload" href="fonts/barlow-condensed-latin-600-normal.woff2" as="font" type="font/woff2" crossorigin>
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "SoftwareApplication",
+  "name": "cs2voice",
+  "operatingSystem": "Windows 10, Windows 11",
+  "applicationCategory": "GameApplication",
+  "description": "Plays every player's voice chat from Counter-Strike 2 demos, with stats, a 2D radar replay, Steam recordings and clips.",
+  "url": "https://krisoft20.github.io/cs2voice/",
+  "downloadUrl": "https://github.com/krisoft20/cs2voice/releases/latest",
+  "screenshot": "https://krisoft20.github.io/cs2voice/img/og.png",
+  "offers": { "@type": "Offer", "price": "0", "priceCurrency": "USD" }
+}
+</script>
+<style>
+@font-face { font-family: 'Barlow Condensed'; font-weight: 600; font-display: swap; src: url(fonts/barlow-condensed-latin-600-normal.woff2) format('woff2'); }
+@font-face { font-family: 'Barlow Semi Condensed'; font-weight: 400; font-display: swap; src: url(fonts/barlow-semi-condensed-latin-400-normal.woff2) format('woff2'); }
+@font-face { font-family: 'Barlow Semi Condensed'; font-weight: 600; font-display: swap; src: url(fonts/barlow-semi-condensed-latin-600-normal.woff2) format('woff2'); }
+
+:root {
+  --night: #14181e;
+  --rail: #181d24;
+  --panel: #1d232b;
+  --raised: #252c36;
+  --hairline: #2d3540;
+  --chalk: #e7eaee;
+  --muted: #8a94a2;
+  --faint: #808a97;
+  --t: #d9a441;
+  --ct: #6e9fd6;
+  --signal: #7cc48b;
+  --display: 'Barlow Condensed', 'Arial Narrow', sans-serif;
+  --ui: 'Barlow Semi Condensed', 'Segoe UI', sans-serif;
+  --mono: 'Cascadia Mono', Consolas, ui-monospace, 'SF Mono', Menlo, 'DejaVu Sans Mono', monospace;
+  color-scheme: dark;
+}
+
+* { box-sizing: border-box; }
+html { scroll-padding-top: 24px; scrollbar-color: var(--raised) var(--night); }
+body { margin: 0; background: var(--night); color: var(--chalk); font: 400 15px/1.45 var(--ui); -webkit-font-smoothing: antialiased; }
+::selection { background: var(--ct); color: var(--night); }
+a { color: inherit; text-underline-offset: 3px; text-decoration-color: var(--faint); }
+a:hover { text-decoration-color: var(--chalk); }
+:focus-visible { outline: 2px solid var(--ct); outline-offset: 2px; border-radius: 4px; }
+
+.console {
+  max-width: 1120px;
+  margin: 32px auto 0;
+  background: var(--rail);
+  border: 1px solid var(--hairline);
+  border-bottom: 0;
+  border-radius: 10px 10px 0 0;
+  min-height: calc(100vh - 32px);
+  display: flex;
+  flex-direction: column;
+}
+.bar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 16px;
+  border-bottom: 1px solid var(--hairline);
+  font: 600 15px/1 var(--display);
+  letter-spacing: 0.02em;
+  color: var(--muted);
+}
+.bar svg { width: 18px; height: 18px; }
+.bar .gh { margin-left: auto; text-decoration: none; color: var(--muted); }
+.bar .gh:hover { color: var(--chalk); }
+
+.log { flex: 1; padding: 22px 24px 40px; font: 400 15px/1.6 var(--mono); }
+.log p { margin: 0; overflow-wrap: anywhere; }
+.cmd { color: var(--chalk); }
+.cmd::before { content: '] '; color: var(--faint); }
+.out { color: #c3c9d1; }
+.tag { color: var(--faint); }
+.entry { padding-top: 56px; }
+.entry:first-child { padding-top: 0; }
+.entry .cmd { margin-bottom: 6px; }
+
+h1 {
+  margin: 28px 0 6px;
+  font: 600 clamp(56px, 9vw, 96px)/0.9 var(--display);
+  letter-spacing: -0.01em;
+  display: flex;
+  align-items: center;
+  gap: 0.18em;
+}
+h1 svg { width: 0.62em; height: 0.62em; flex: none; }
+.log .lead { margin: 0 0 20px; font: 600 clamp(24px, 2.8vw, 32px)/1.1 var(--display); color: var(--chalk); text-wrap: balance; }
+
+.get { display: flex; flex-wrap: wrap; gap: 10px; margin: 18px 0 8px; font-family: var(--ui); }
+.go, .ghost {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 16px;
+  border-radius: 6px;
+  font: 600 17px/1 var(--display);
+  letter-spacing: 0.01em;
+  text-decoration: none;
+  transition: background-color 0.15s, border-color 0.15s;
+}
+.go { background: var(--chalk); color: var(--night); }
+.go:hover { background: #fff; }
+.ghost { border: 1px solid var(--hairline); color: var(--chalk); }
+.ghost:hover { background: var(--panel); border-color: var(--faint); }
+.go svg, .ghost svg { width: 18px; height: 18px; }
+.req { font: 400 13px/1.4 var(--ui); color: var(--faint); margin: 4px 0 0; }
+
+figure { margin: 18px 0 0; }
+figure img {
+  display: block;
+  width: 100%;
+  height: auto;
+  border: 1px solid var(--hairline);
+  border-radius: 8px;
+  background: var(--night);
+}
+figcaption { margin-top: 8px; font: 600 14px/1.2 var(--display); letter-spacing: 0.02em; color: var(--muted); }
+.log .after { margin-top: 28px; }
+.trio { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin-top: 14px; }
+.trio figure { margin: 0; }
+
+.prompt {
+  position: sticky;
+  z-index: 2;
+  bottom: 0;
+  background: var(--rail);
+  border-top: 1px solid var(--hairline);
+  padding: 10px 16px 14px;
+}
+.prompt form { display: flex; gap: 8px; }
+.prompt input {
+  flex: 1;
+  min-width: 0;
+  background: var(--night);
+  border: 1px solid var(--hairline);
+  border-radius: 5px;
+  color: var(--chalk);
+  font: 400 15px/1 var(--mono);
+  padding: 10px 12px;
+  caret-color: var(--t);
+}
+.prompt input::placeholder { color: var(--faint); }
+.prompt input { transition: border-color 0.15s, background-color 0.15s; }
+.prompt input:hover { border-color: var(--faint); }
+.prompt input:focus { outline: none; border-color: var(--ct); background: #10141a; }
+.prompt button {
+  background: var(--raised);
+  border: 1px solid var(--hairline);
+  border-radius: 5px;
+  color: var(--chalk);
+  font: 600 15px/1 var(--display);
+  padding: 0 16px;
+  cursor: pointer;
+}
+.prompt button:hover { border-color: var(--faint); }
+.hints {
+  position: absolute;
+  left: 16px;
+  bottom: calc(100% - 4px);
+  width: min(520px, calc(100% - 32px));
+  list-style: none;
+  margin: 0;
+  padding: 4px;
+  background: var(--panel);
+  border: 1px solid var(--hairline);
+  border-radius: 6px;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.55);
+  font: 400 14px/1 var(--mono);
+  opacity: 0;
+  transform: translateY(6px);
+  visibility: hidden;
+  transition: opacity 0.18s cubic-bezier(0.16, 1, 0.3, 1), transform 0.18s cubic-bezier(0.16, 1, 0.3, 1), visibility 0s 0.18s;
+}
+.hints.open { opacity: 1; transform: none; visibility: visible; transition-delay: 0s; }
+.hints li { padding: 7px 10px; border-radius: 4px; cursor: pointer; display: flex; gap: 14px; }
+.hints li span { color: var(--faint); }
+.hints li[aria-selected="true"], .hints li:hover { background: var(--raised); }
+.miss { position: absolute; left: 16px; bottom: calc(100% + 4px); color: var(--muted); font: 400 14px/1.4 var(--mono); margin: 0; background: var(--panel); border: 1px solid var(--hairline); border-radius: 6px; padding: 6px 10px; }
+.miss[hidden] { display: none; }
+
+footer { max-width: 1120px; margin: 0 auto; padding: 18px 16px 40px; color: var(--faint); font-size: 13px; }
+
+.typing::after { content: ''; display: inline-block; width: 0.55em; height: 1.1em; margin-left: 2px; vertical-align: -0.2em; background: var(--t); animation: blink 1s steps(1) infinite; }
+@keyframes blink { 50% { opacity: 0; } }
+.intro .reveal { opacity: 0; transform: translateY(6px); transition: opacity 0.35s cubic-bezier(0.16, 1, 0.3, 1), transform 0.35s cubic-bezier(0.16, 1, 0.3, 1); }
+.intro .reveal.on { opacity: 1; transform: none; }
+
+@media (max-width: 760px) {
+  .console { margin: 0; border-radius: 0; border-left: 0; border-right: 0; min-height: 100vh; }
+  .log { padding: 18px 16px 32px; font-size: 14px; }
+  .entry { padding-top: 44px; }
+  .trio { grid-template-columns: 1fr 1fr; }
+  .prompt { padding: 8px 12px 12px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .reveal { opacity: 1; transform: none; transition: none; }
+  .typing::after { animation: none; }
+  html { scroll-behavior: auto; }
+}
+</style>
+</head>
+<body>
+<div class="console">
+  <div class="bar">
+    <svg viewBox="0 0 32 32" aria-hidden="true"><rect x="1.2" y="9.1" width="4.5" height="13.8" rx="2.25" fill="#d9a441"/><rect x="7.6" y="4.9" width="4.5" height="22.2" rx="2.25" fill="#d9a441"/><rect x="13.75" y="1" width="4.5" height="30" rx="2.25" fill="#7cc48b"/><rect x="19.9" y="4.9" width="4.5" height="22.2" rx="2.25" fill="#6e9fd6"/><rect x="26.3" y="9.1" width="4.5" height="13.8" rx="2.25" fill="#6e9fd6"/></svg>
+    <span>Console</span>
+    <a class="gh" href="https://github.com/krisoft20/cs2voice">github.com/krisoft20/cs2voice</a>
+  </div>
+
+  <main class="log" id="log">
+    <section class="entry" id="top">
+      <p class="cmd" id="first" data-text="cs2voice">cs2voice</p>
+      <h1 class="reveal">
+        <svg viewBox="0 0 32 32" aria-hidden="true"><rect x="1.2" y="9.1" width="4.5" height="13.8" rx="2.25" fill="#d9a441"/><rect x="7.6" y="4.9" width="4.5" height="22.2" rx="2.25" fill="#d9a441"/><rect x="13.75" y="1" width="4.5" height="30" rx="2.25" fill="#7cc48b"/><rect x="19.9" y="4.9" width="4.5" height="22.2" rx="2.25" fill="#6e9fd6"/><rect x="26.3" y="9.1" width="4.5" height="13.8" rx="2.25" fill="#6e9fd6"/></svg>
+        cs2voice
+      </h1>
+      <p class="lead reveal">Hear what everyone said in your CS2 demos.</p>
+      <p class="out reveal"><span class="tag">[cs2voice]</span> Free Windows app. Your demos never leave your PC.</p>
+      <div class="get reveal" id="download">
+        <a class="go" href="https://apps.microsoft.com/detail/9pdv2hrck9ws">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M3 5.5 10.5 4.4v7.1H3zm8.5-1.2L21 3v8.5h-9.5zM3 12.5h7.5v7.1L3 18.5zm8.5 0H21V21l-9.5-1.3z"/></svg>
+          Get it from Microsoft Store
+        </a>
+        <a class="ghost" href="https://github.com/krisoft20/cs2voice/releases/latest/download/cs2voice.exe">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" d="M12 4v11m-4.5-4.5L12 15l4.5-4.5M5 19h14"/></svg>
+          Download cs2voice.exe
+        </a>
+      </div>
+      <p class="req reveal">Windows 10 or 11, 64-bit.</p>
+    </section>
+
+    <section class="entry" id="overview">
+      <p class="cmd">status</p>
+      <p class="out"><span class="tag">[Match]</span> Both teams, FACEIT levels, awards. Watch in game copies the console command.</p>
+      <figure>
+        <img src="img/overview.webp" width="1424" height="892" alt="Overview tab: Anubis 13:10, both teams with K/D/A and rating, match awards below" loading="lazy">
+      </figure>
+    </section>
+
+    <section class="entry" id="voices">
+      <p class="cmd">tv_listen_voice_indices 6; playdemo "anubis.dem"</p>
+      <p class="out"><span class="tag">[Voice]</span> Every player's voice, round by round, next to the kills.</p>
+      <figure>
+        <img src="img/voices.webp" width="1424" height="892" alt="Voices tab: round 16 on Anubis, one lane per player with speech and kills" loading="lazy">
+      </figure>
+    </section>
+
+    <section class="entry" id="radar">
+      <p class="cmd">setpos 1020.000 432.000 -125.969;setang 4.000000 -135.000000 0</p>
+      <p class="out"><span class="tag">[Radar]</span> 2D replay with every grenade. Copy where it was thrown from.</p>
+      <figure>
+        <img src="img/radar.webp" width="1424" height="892" alt="Radar tab: Anubis round 16 with players, kill feed and the grenades thrown" loading="lazy">
+      </figure>
+    </section>
+
+    <section class="entry" id="replays">
+      <p class="cmd">replays</p>
+      <p class="out"><span class="tag">[Replays]</span> Steam's recording of your match, lined up with the demo.</p>
+      <figure>
+        <img src="img/replays.webp" width="1424" height="892" alt="Replays page: Steam recording of an Anubis match with kills listed per round" loading="lazy">
+      </figure>
+      <p class="out after"><span class="tag">[Clips]</span> Cut a moment into an MP4 for Discord.</p>
+      <figure>
+        <img src="img/clip.webp" width="1424" height="892" alt="Clip editor: a 15 second range picked on the replay timeline, sized for Discord" loading="lazy">
+      </figure>
+    </section>
+
+    <section class="entry" id="more">
+      <p class="out"><span class="tag">[cs2voice]</span> Also in every match:</p>
+      <div class="trio">
+        <figure><img src="img/players.webp" width="1424" height="892" alt="Players tab: each stat drawn against how players usually score" loading="lazy"><figcaption>Players</figcaption></figure>
+        <figure><img src="img/details.webp" width="1424" height="892" alt="Details tab: round result and kill feed" loading="lazy"><figcaption>Rounds</figcaption></figure>
+        <figure><img src="img/crosshairs.webp" width="1424" height="892" alt="Crosshairs tab: every player's crosshair with its share code" loading="lazy"><figcaption>Crosshairs</figcaption></figure>
+        <figure><img src="img/skins.webp" width="1424" height="892" alt="Skins tab: every player's skins with float and stickers" loading="lazy"><figcaption>Skins</figcaption></figure>
+      </div>
+    </section>
+
+    <section class="entry" id="get">
+      <p class="cmd">download</p>
+      <div class="get">
+        <a class="go" href="https://apps.microsoft.com/detail/9pdv2hrck9ws">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M3 5.5 10.5 4.4v7.1H3zm8.5-1.2L21 3v8.5h-9.5zM3 12.5h7.5v7.1L3 18.5zm8.5 0H21V21l-9.5-1.3z"/></svg>
+          Get it from Microsoft Store
+        </a>
+        <a class="ghost" href="https://github.com/krisoft20/cs2voice/releases/latest/download/cs2voice.exe">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" d="M12 4v11m-4.5-4.5L12 15l4.5-4.5M5 19h14"/></svg>
+          Download cs2voice.exe
+        </a>
+      </div>
+      <p class="out"><span class="tag">[cs2voice]</span> Only from here, the <a href="https://apps.microsoft.com/detail/9pdv2hrck9ws">Microsoft Store</a> and <a href="https://github.com/krisoft20/cs2voice">GitHub</a>. Not affiliated with Valve.</p>
+    </section>
+  </main>
+
+  <div class="prompt">
+    <p class="miss" id="miss" hidden></p>
+    <ul class="hints" id="hints" role="listbox"></ul>
+    <form id="form" autocomplete="off">
+      <label for="cmd" class="tag" hidden>Command</label>
+      <input id="cmd" name="cmd" placeholder="type a command, like radar (or press ~)" spellcheck="false" role="combobox" aria-controls="hints" aria-expanded="false" aria-autocomplete="list">
+      <button type="submit">Submit</button>
+    </form>
+  </div>
+</div>
+
+<footer>cs2voice, made by krisoft20. Map art and icons in the screenshots belong to Valve.</footer>
+
+<script>
+const cmds = [
+  ['overview', 'teams and awards', 'overview'],
+  ['status', 'teams and awards', 'overview'],
+  ['voices', 'voice chat per round', 'voices'],
+  ['radar', '2d replay and grenades', 'radar'],
+  ['replays', 'steam recordings', 'replays'],
+  ['clips', 'mp4 for discord', 'replays'],
+  ['stats', 'players, rounds, crosshairs, skins', 'more'],
+  ['download', 'microsoft store or exe', 'get'],
+]
+const input = document.getElementById('cmd')
+const hints = document.getElementById('hints')
+const miss = document.getElementById('miss')
+let sel = -1
+let shown = []
+
+function go(id) {
+  const el = document.getElementById(id)
+  if (!el) return
+  el.scrollIntoView({ behavior: matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth' })
+  history.replaceState(null, '', '#' + id)
+}
+
+function draw() {
+  const q = input.value.trim().toLowerCase()
+  shown = q ? cmds.filter(c => c[0].startsWith(q)) : cmds.filter(c => c[0] !== 'status' && c[0] !== 'clips')
+  if (sel >= shown.length) sel = shown.length - 1
+  hints.innerHTML = ''
+  shown.forEach((c, i) => {
+    const li = document.createElement('li')
+    li.setAttribute('role', 'option')
+    li.setAttribute('aria-selected', i === sel ? 'true' : 'false')
+    li.innerHTML = '<b></b><span></span>'
+    li.firstChild.textContent = c[0]
+    li.lastChild.textContent = c[1]
+    li.addEventListener('mousedown', e => { e.preventDefault(); run(c[0]) })
+    hints.appendChild(li)
+  })
+  const open = document.activeElement === input && shown.length > 0
+  hints.classList.toggle('open', open)
+  input.setAttribute('aria-expanded', open ? 'true' : 'false')
+}
+
+function run(text) {
+  const q = text.trim().toLowerCase().replace(/^\]\s*/, '')
+  if (!q) return
+  const hit = cmds.find(c => c[0] === q) || cmds.find(c => c[0].startsWith(q))
+  if (hit) {
+    miss.hidden = true
+    input.value = ''
+    sel = -1
+    input.blur()
+    hints.classList.remove('open')
+    go(hit[2])
+  } else {
+    miss.textContent = 'Unknown command: ' + q
+    miss.hidden = false
+  }
+}
+
+input.addEventListener('input', () => { sel = -1; miss.hidden = true; draw() })
+input.addEventListener('focus', draw)
+input.addEventListener('blur', () => { hints.classList.remove('open'); input.setAttribute('aria-expanded', 'false') })
+input.addEventListener('keydown', e => {
+  if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+    e.preventDefault()
+    if (!shown.length) return
+    sel = e.key === 'ArrowDown' ? (sel + 1) % shown.length : (sel <= 0 ? shown.length - 1 : sel - 1)
+    draw()
+  } else if (e.key === 'Tab' && shown.length && input.value) {
+    e.preventDefault()
+    input.value = shown[Math.max(sel, 0)][0]
+    draw()
+  } else if (e.key === 'Escape') {
+    input.blur()
+  }
+})
+document.getElementById('form').addEventListener('submit', e => {
+  e.preventDefault()
+  run(sel >= 0 && shown[sel] ? shown[sel][0] : input.value)
+})
+document.addEventListener('keydown', e => {
+  if ((e.key === '`' || e.key === '~') && document.activeElement !== input) {
+    e.preventDefault()
+    input.focus()
+  }
+})
+
+const first = document.getElementById('first')
+const reveals = document.querySelectorAll('.reveal')
+if (!matchMedia('(prefers-reduced-motion: reduce)').matches) {
+  document.documentElement.classList.add('intro')
+  const text = first.dataset.text
+  first.textContent = ''
+  first.classList.add('typing')
+  let i = 0
+  const step = () => {
+    first.textContent = text.slice(0, ++i)
+    if (i < text.length) return setTimeout(step, 55)
+    setTimeout(() => {
+      first.classList.remove('typing')
+      reveals.forEach((r, n) => setTimeout(() => r.classList.add('on'), n * 70))
+    }, 180)
+  }
+  setTimeout(step, 250)
+}
+</script>
+</body>
+</html>
