@@ -229,7 +229,8 @@ namespace launch {
         }
         if (j.talk) {
             const talk::opts_t& o = j.opts;
-            std::string talk_name = j.file.name.substr(0, lower.rfind(".dem")) + "-talk-" + std::to_string(o.style) + "-" + std::to_string(o.lead) + "-" + std::to_string(o.min) + "-" + std::to_string(o.refresh) + ".dem";
+            std::string stem = j.file.name.substr(0, lower.rfind(".dem")) + (path == text::utf8(fixed) ? "-fixed" : "");
+            std::string talk_name = stem + "-talk-" + std::to_string(o.style) + "-" + std::to_string(o.lead) + "-" + std::to_string(o.min) + "-" + std::to_string(o.refresh) + ".dem";
             std::wstring dst = g_dir + L"\\" + text::wide(talk_name);
             std::string talk_path = text::utf8(dst);
             if (GetFileAttributesW(dst.c_str()) != INVALID_FILE_ATTRIBUTES) {
