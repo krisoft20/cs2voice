@@ -22,53 +22,61 @@ cs2voice is free and only comes from this repo and its [Microsoft Store page](ht
 
 ## Demos
 
-cs2voice lists demos from the CS2 replays folder, Downloads and any folders you add, in `.dem` and `.dem.zst`, from FACEIT and matchmaking. Each one shows the map, score, teams, date and whether it has voice.
-
-Cleanup finds old demos you have not opened, second copies of the same match and unreadable files, and moves them to the Recycle Bin or deletes them for good. It can ask first or run on its own.
-
-## Tabs
+Finds demos in the CS2 replays folder, Downloads and folders you add, `.dem` and `.dem.zst`, FACEIT and matchmaking. Cleanup moves old and duplicate demos to the Recycle Bin.
 
 ### Overview
 
-Both teams with K/D/A, rating and Steam account year, a button to hear one player or one team, and the match awards. "Watch in game" copies the console command that plays the demo with only the voices you picked.
+Both teams, match awards, and "Watch in game", which copies the console command that plays the demo with only the voices you picked.
 
 ![Overview](docs/overview.png)
 
 ### Players
 
-Rating, K/D, ADR, KAST, accuracy, head accuracy, wallbang and smoke kills, time to damage, reaction time and crosshair placement. Each stat is drawn against how players usually score.
+Every stat drawn against how players usually score.
 
 ![Players](docs/players.png)
 
 ### Details
 
-How each round ended, the kill feed with the game's icons, gear and damage per round, and a match table.
+How each round ended, the kill feed, gear and damage.
 
 ![Details](docs/details.png)
 
 ### Voices
 
-One round at a time. Each player has a lane with their speech drawn by loudness, with kills, deaths and the bomb marked. Play everyone, one team or one player, skip silence, change the speed and cut a clip.
+Every player's voice, round by round, next to the kills. Play everyone, one team or one player, skip silence, cut a clip.
 
 ![Voices](docs/voices.png)
 
 ### Radar
 
-A 2D replay of the match: positions, view directions, grenades with their flight paths, smokes, fires, the bomb, damage and kills. Click a grenade to see where it was thrown from, how it was thrown (jumpthrow, run, crouch) and a `setpos`/`setang` line to copy.
+2D replay with grenades, smokes, fires and the bomb. Click a grenade to copy a `setpos` line to where it was thrown from.
 
 ![Radar](docs/radar.png)
 
 ### Crosshairs
 
-Every player's crosshair drawn at game size, with its settings and a copy button for the share code.
+Every player's crosshair at game size, with a copy button for the share code.
 
 ![Crosshairs](docs/crosshairs.png)
 
 ### Skins
 
-Every player's skins with wear, float, StatTrak and stickers, split by T and CT side. Click one to see it large.
+Every player's skins with wear, float, StatTrak and stickers.
 
 ![Skins](docs/skins.png)
+
+## Replays
+
+Steam's background recording of your match, lined up with the demo's rounds and kills. Keep a copy before Steam records over it.
+
+![Replays](docs/replays.png)
+
+## Clips
+
+Cut a moment into an MP4 sized for Discord (20, 50 or 500 MB) and paste it straight in.
+
+![Clips](docs/clip.png)
 
 ## Privacy
 
