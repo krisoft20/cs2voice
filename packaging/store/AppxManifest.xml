@@ -16,6 +16,7 @@
     <Resource Language="en-us" />
     <Resource Language="pl-pl" />
     <Resource Language="de-de" />
+    <Resource Language="ru-ru" />
   </Resources>
   <Applications>
     <Application Id="cs2voice" Executable="cs2voice.exe" EntryPoint="Windows.FullTrustApplication">
