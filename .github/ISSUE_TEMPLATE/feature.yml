@@ -1,0 +1,11 @@
+name: Idea
+description: Something you want cs2voice to do
+labels: [idea]
+body:
+  - type: textarea
+    id: what
+    attributes:
+      label: What you want
+      description: What you are trying to do and what is missing.
+    validations:
+      required: true

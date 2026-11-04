@@ -1,0 +1,35 @@
+name: Bug
+description: Something does not work
+labels: [bug]
+body:
+  - type: input
+    id: version
+    attributes:
+      label: cs2voice version
+      placeholder: "0.1.7"
+    validations:
+      required: true
+  - type: dropdown
+    id: from
+    attributes:
+      label: Installed from
+      options: [GitHub, Microsoft Store]
+    validations:
+      required: true
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened
+      description: What you did, what you expected, what happened instead.
+    validations:
+      required: true
+  - type: textarea
+    id: log
+    attributes:
+      label: Log
+      description: Attach %LOCALAPPDATA%\cs2voice\cs2voice.log, and for a crash the newest file from %LOCALAPPDATA%\cs2voice\crashes.
+  - type: input
+    id: demo
+    attributes:
+      label: Demo
+      description: Link to the demo or FACEIT match, if it happens with one demo.
