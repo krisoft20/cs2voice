@@ -13,6 +13,7 @@ struct rec_match_t {
     std::string map;
     std::string kda;
     std::string score;
+    bool knife = false;
     double start = 0;
     double duration = 0;
 };

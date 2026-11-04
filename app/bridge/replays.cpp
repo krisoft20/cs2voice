@@ -459,7 +459,8 @@ namespace replays {
                 r.length = m.duration;
                 r.meta = "\"id\":\"" + json::escape(id) + "\",\"mode\":\"" + json::escape(m.mode) + "\",\"map\":\"" + json::escape(m.map) + "\",\"kda\":\"" +
                          json::escape(m.kda) + "\",\"score\":\"" + json::escape(m.score) + "\",\"unix\":" + std::to_string(r.unix) +
-                         ",\"duration\":" + num(m.duration);
+                         ",\"duration\":" + num(m.duration) +
+                         (m.knife ? ",\"knife\":true" : "");
                 std::string video;
                 if (v) {
                     auto it = codecs.find(v->folder);

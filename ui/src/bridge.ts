@@ -144,6 +144,7 @@ export type ReplayMatch = {
   score: string
   unix: number
   duration: number
+  knife?: boolean
   video?: string
   codec?: string
   at?: number

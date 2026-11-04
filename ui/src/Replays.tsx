@@ -5,7 +5,7 @@ import type { Key, T } from './i18n'
 import { ICONS, Icon, reasonOf } from './Details'
 import { AspectIcon, BombIcon, BookmarkIcon, CheckIcon, ChevronDownIcon, CloseIcon, CopyIcon, DemosIcon, DotsIcon, ExpandIcon, MuteIcon, PanelIcon, PauseIcon, PlayIcon, SaveIcon, ScissorsIcon, ShrinkIcon, SkipBackIcon, SkipForwardIcon, SkullIcon, StarIcon, StepBackIcon, StepForwardIcon, TargetIcon, TradeIcon, UsersIcon, VolumeIcon } from './icons'
 import { weaponIcon, weaponName } from './items'
-import { when } from './voice'
+import { source, when } from './voice'
 
 export type ReplaysData = { folder: string; background: number; keep: number; rate?: number; buffer?: number; length?: number; free?: number; saved_dir?: string; matches: ReplayMatch[] }
 
@@ -132,6 +132,8 @@ const closest = (list: Mark[], s: Mark, off: number) => {
   for (const x of list) if (x.kind === s.kind && (!best || Math.abs(x.t + off - s.t) < Math.abs(best.t + off - s.t))) best = x
   return best && Math.abs(best.t + off - s.t) < PAIR_WINDOW ? best : null
 }
+
+const modeOf = (m: ReplayMatch, pair: Pair | null, t: T) => (pair && source(pair.roster.server, t)) || (m.knife ? 'FACEIT' : m.mode)
 
 const pairDemo = (m: ReplayMatch, demos: Demo[], rosters: Record<string, Roster>, me: string): Pair | null => {
   if (m.at === undefined || !me) return null
@@ -871,7 +873,7 @@ export function ReplayList(props: {
               </span>
               <span className="item-meta">{when(m.unix, t, lang)}</span>
               <span className="item-tags">
-                <span className="tag">{m.mode}</span>
+                <span className="tag">{modeOf(m, pair, t)}</span>
                 {m.kda && <span className="tag">{m.kda}</span>}
                 {pair && <span className="tag voice">{t('replayDemo')}</span>}
                 {m.saved && <span className="tag">{t(m.auto ? 'replayAutoTag' : 'replaySavedTag')}</span>}
@@ -1765,7 +1767,7 @@ export function ReplayView(props: {
               <span className="rp-head-map">
                 <span>
                   {m.map}
-                  <small>{m.mode}</small>
+                  <small>{modeOf(m, pair, t)}</small>
                 </span>
                 {m.video && (
                   <button

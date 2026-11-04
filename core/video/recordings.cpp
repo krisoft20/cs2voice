@@ -6,6 +6,7 @@
 
 namespace recordings {
     const double JOIN_GAP = 5.0;
+    const double KNIFE_MAX = 180.0;
     const double EXTEND_GAP = 240.0;
     const double EXTEND_TAIL = 8.0;
 
@@ -60,10 +61,14 @@ namespace recordings {
     void join(std::vector<rec_match_t>& list) {
         std::sort(list.begin(), list.end(), [](const rec_match_t& a, const rec_match_t& b) { return a.start < b.start; });
         std::vector<rec_match_t> out;
+        std::vector<bool> joined;
         for (const rec_match_t& m : list) {
             if (!out.empty()) {
                 rec_match_t& last = out.back();
                 if (last.mode == m.mode && last.map == m.map && m.start - (last.start + last.duration) < JOIN_GAP) {
+                    if (!joined.back() && last.duration < KNIFE_MAX)
+                        last.knife = true;
+                    joined.back() = true;
                     last.duration = m.start + m.duration - last.start;
                     if (!m.kda.empty())
                         last.kda = m.kda;
@@ -73,6 +78,7 @@ namespace recordings {
                 }
             }
             out.push_back(m);
+            joined.push_back(false);
         }
         list.swap(out);
     }
