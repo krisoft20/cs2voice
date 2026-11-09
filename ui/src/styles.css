@@ -1141,6 +1141,30 @@ button:focus-visible {
   font: 600 14px/1 var(--display);
 }
 
+.avatar.pc {
+  outline: 2px solid var(--pc);
+}
+
+.pill-faces .avatar.pc {
+  box-shadow: 0 0 0 4px #252c36;
+}
+
+.award-face .avatar.pc {
+  box-shadow: 0 0 0 4px var(--accent);
+}
+
+.award.star .award-face .avatar.pc {
+  box-shadow: 0 0 0 5px var(--award), 0 0 26px color-mix(in srgb, var(--award) 40%, transparent);
+}
+
+.vc-lane.talk .vc-who .avatar.pc {
+  box-shadow: 0 0 0 4px var(--accent);
+}
+
+.rr-card.talking .avatar.pc {
+  box-shadow: 0 0 0 4px var(--signal);
+}
+
 .avatar-link {
   position: relative;
   display: grid;
@@ -4474,6 +4498,31 @@ button:focus-visible {
   stroke: var(--t);
 }
 
+.rr-player.pc .body {
+  fill: var(--pc);
+}
+
+.rr-player .side {
+  fill: rgba(10, 12, 15, 0.9);
+}
+
+.rr-player.t .side {
+  stroke: var(--t);
+}
+
+.rr-player.ct .side {
+  stroke: var(--ct);
+}
+
+.rr-player.pc .ring {
+  stroke: var(--pc);
+}
+
+.rr-player.pc.on .body,
+.rr-player.pc.on .ring {
+  stroke: #fff;
+}
+
 .rr-player .hp-bg {
   fill: rgba(10, 12, 15, 0.8);
 }
@@ -6870,6 +6919,11 @@ html.video-on body {
 
 .rp-face.ct {
   outline: 2px solid #5b93d8;
+  outline-offset: -2px;
+}
+
+.rp-face.pc {
+  outline: 2px solid var(--pc);
   outline-offset: -2px;
 }
 

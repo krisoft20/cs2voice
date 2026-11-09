@@ -429,7 +429,7 @@ export function Voices(props: {
                   <div key={l.speaker} className={`vc-lane${on ? '' : ' muted'}${now && on ? ' talk' : ''}`}>
                     <button className="vc-who" onClick={() => toggle([l.speaker])} aria-pressed={on}>
                       <Speaker on={on} />
-                      <Avatar url={l.member ? avatars[l.member.steamid] : undefined} name={name} />
+                      <Avatar url={l.member ? avatars[l.member.steamid] : undefined} name={name} color={l.member?.color} />
                       <span className="vc-nick">{name}</span>
                       <span className="vc-share">{totalTalk > 0 ? `${Math.round((100 * talk) / totalTalk)}%` : ''}</span>
                     </button>

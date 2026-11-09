@@ -22,8 +22,19 @@ export const remember = (key: string, value: string) => {
   } catch {}
 }
 
-export function Avatar(props: { url?: string; name: string }) {
+const PLAYER_COLORS = ['#f2e43a', '#a54ad8', '#21b26c', '#3e9de8', '#f08f26']
+
+export const playerColor = (c?: number) => (c !== undefined && c >= 0 ? PLAYER_COLORS[c] : undefined)
+
+export const colorStyle = (c?: number) => {
+  const pc = playerColor(c)
+  return pc ? { ['--pc' as string]: pc } : undefined
+}
+
+export function Avatar(props: { url?: string; name: string; color?: number }) {
   const [broken, setBroken] = useState('')
-  if (props.url && broken !== props.url) return <img className="avatar" src={props.url} alt="" onError={() => setBroken(props.url ?? '')} />
-  return <span className="avatar none">{(props.name || '?').slice(0, 1).toUpperCase()}</span>
+  const pc = playerColor(props.color) ? ' pc' : ''
+  const style = colorStyle(props.color)
+  if (props.url && broken !== props.url) return <img className={`avatar${pc}`} style={style} src={props.url} alt="" onError={() => setBroken(props.url ?? '')} />
+  return <span className={`avatar none${pc}`} style={style}>{(props.name || '?').slice(0, 1).toUpperCase()}</span>
 }

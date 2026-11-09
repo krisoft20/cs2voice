@@ -79,7 +79,7 @@ export type PerfMsg = { type: 'perf'; path: string; err: string; players: PerfRo
 
 export type Profile = { avatar: string; vac: boolean; limited: boolean; hidden: boolean; since: number }
 
-export type Player = { slot: number; name: string; crosshair?: string; steamid: string; team: number; voice: number; mute?: number; stats?: Stats; demoName?: string; level?: number; elo?: number; rank?: number }
+export type Player = { slot: number; name: string; crosshair?: string; steamid: string; team: number; voice: number; mute?: number; color?: number; stats?: Stats; demoName?: string; level?: number; elo?: number; rank?: number }
 
 export type FaceitPlayer = { steamid: string; nick: string; level: number; elo: number; rank: number }
 

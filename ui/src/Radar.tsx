@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { Player as Member, Roster } from './bridge'
 import { send } from './bridge'
-import { Avatar, remember, remembered, useUi } from './common'
+import { Avatar, colorStyle, playerColor, remember, remembered, useUi } from './common'
 import { Icon, Strip, reasonOf } from './Details'
 import { GRENADES, itemIcon, itemName, weaponIcon } from './items'
 import type { Playback } from './playback'
@@ -579,10 +579,13 @@ export function Radar(props: { roster: Roster; track: Track | null; err?: string
         const blind = blindOf(slot)
         const on = follow === slot
         const speaking = talking.has(member?.steamid ?? '')
+        const pc = !!playerColor(member?.color)
+        const pad = pc ? 2.6 * unit : 0
         return (
           <g
             key={slot}
-            className={`rr-player ${side}${speaking ? ' talking' : ''}${on ? ' on' : ''}`}
+            className={`rr-player ${side}${speaking ? ' talking' : ''}${on ? ' on' : ''}${pc ? ' pc' : ''}`}
+            style={colorStyle(member?.color)}
             opacity={dimOf(spot.z)}
             onClick={() => !drag.current?.moved && setFollow(on ? null : slot)}
           >
@@ -590,6 +593,7 @@ export function Radar(props: { roster: Roster; track: Track | null; err?: string
               className="cone"
               d={`M${x} ${y}L${x + Math.cos(a - half) * cone} ${y + Math.sin(a - half) * cone}A${cone} ${cone} 0 0 1 ${x + Math.cos(a + half) * cone} ${y + Math.sin(a + half) * cone}Z`}
             />
+            {pc && <circle className="side" cx={x} cy={y} r={r + 1.8 * unit} strokeWidth={1.8 * unit} />}
             {faces && avatars[member?.steamid ?? ''] ? (
               <>
                 <clipPath id={`rr-face-${slot}`}>
@@ -602,7 +606,7 @@ export function Radar(props: { roster: Roster; track: Track | null; err?: string
               <circle className="body" cx={x} cy={y} r={r} strokeWidth={1.4 * unit} />
             )}
             {blind > 0 && <circle className="blind" cx={x} cy={y} r={r} opacity={0.25 + 0.75 * blind} />}
-            {speaking && <circle className="talk" cx={x} cy={y} r={r + 3.5 * unit} strokeWidth={1.3 * unit} />}
+            {speaking && <circle className="talk" cx={x} cy={y} r={r + pad + 3.5 * unit} strokeWidth={1.3 * unit} />}
             {spot.hp < 100 && (
               <>
                 <rect className="hp-bg" x={x - 8 * unit} y={y + r + 3 * unit} width={16 * unit} height={2.4 * unit} />
@@ -612,7 +616,7 @@ export function Radar(props: { roster: Roster; track: Track | null; err?: string
             {spot.bomb && (
               <image href="https://cs2voice-maps.example/icons/icons_equipment_c4.svg" x={x + 6 * unit} y={y - 15 * unit} width={10 * unit} height={10 * unit} />
             )}
-            {spot.defusing && <circle className="defusing" cx={x} cy={y} r={r + 6 * unit} strokeWidth={1.8 * unit} />}
+            {spot.defusing && <circle className="defusing" cx={x} cy={y} r={r + pad + 6 * unit} strokeWidth={1.8 * unit} />}
             <text className="name" x={x} y={y + r + 16 * unit} fontSize={12 * unit} strokeWidth={2.6 * unit}>
               {member?.name ?? ''}
             </text>
@@ -845,7 +849,7 @@ function Players(props: {
                   onClick={() => setFollow(follow === slot ? null : slot)}
                   style={{ ['--hp' as string]: `${spot.alive ? spot.hp : 0}%` }}
                 >
-                  <Avatar url={avatars[member?.steamid ?? '']} name={member?.name ?? '?'} />
+                  <Avatar url={avatars[member?.steamid ?? '']} name={member?.name ?? '?'} color={member?.color} />
                   <span className="nm">
                     {member?.name ?? '?'}
                     {kills > 0 && (

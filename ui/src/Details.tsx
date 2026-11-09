@@ -238,7 +238,7 @@ function RoundView(props: { roster: Roster; labels: string[]; avatars: Record<st
               return (
                 <div key={p.slot} className={`dt-prow ${l[4] === 3 ? 'ct' : 't'}${l[2] ? ' dead' : ''}`}>
                   <span className="dt-name">
-                    <Avatar url={avatars[p.steamid]} name={p.name} />
+                    <Avatar url={avatars[p.steamid]} name={p.name} color={p.color} />
                     <span>{p.name}</span>
                   </span>
                   <span className="dt-money">{e ? money(e[0]) : '–'}</span>
@@ -316,7 +316,7 @@ function MatchView(props: { roster: Roster; avatars: Record<string, string> }) {
             {rows.map(p => (
               <tr key={p.slot} className={roster.teams[p.team]?.side === 3 ? 'ct' : 't'}>
                 <td className="who">
-                  <Avatar url={avatars[p.steamid]} name={p.name} />
+                  <Avatar url={avatars[p.steamid]} name={p.name} color={p.color} />
                   <span>{p.name}</span>
                 </td>
                 {cols.map(c => {

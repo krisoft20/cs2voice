@@ -1,6 +1,6 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, type PointerEvent, type ReactNode } from 'react'
 import { send, type Clip, type Demo, type Player, type PlayerState, type ReplayEvent, type ReplayMatch, type Roster } from './bridge'
-import { Avatar, useUi } from './common'
+import { Avatar, colorStyle, playerColor, useUi } from './common'
 import type { Key, T } from './i18n'
 import { ICONS, Icon, reasonOf } from './Details'
 import { AspectIcon, BombIcon, BookmarkIcon, CheckIcon, ChevronDownIcon, CloseIcon, CopyIcon, DemosIcon, DotsIcon, ExpandIcon, MuteIcon, PanelIcon, PauseIcon, PlayIcon, SaveIcon, ScissorsIcon, ShrinkIcon, SkipBackIcon, SkipForwardIcon, SkullIcon, StarIcon, StepBackIcon, StepForwardIcon, TargetIcon, TradeIcon, UsersIcon, VolumeIcon } from './icons'
@@ -946,7 +946,11 @@ function Glyph(props: { kind: string; icons: boolean }) {
 function Face(props: { p?: Player; avatars: Record<string, string>; side?: number; small?: boolean }) {
   const { p, avatars, side, small } = props
   return (
-    <span className={`rp-face${small ? ' small' : ''}${side === 2 ? ' t' : side === 3 ? ' ct' : ''}`} title={p?.name}>
+    <span
+      className={`rp-face${small ? ' small' : ''}${side === 2 ? ' t' : side === 3 ? ' ct' : ''}${playerColor(p?.color) ? ' pc' : ''}`}
+      style={colorStyle(p?.color)}
+      title={p?.name}
+    >
       <Avatar url={p ? avatars[p.steamid] : undefined} name={p?.name ?? '?'} />
     </span>
   )

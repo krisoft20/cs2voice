@@ -10,6 +10,7 @@ struct roster_player_t {
     std::string name;
     std::string crosshair;
     int mute = 0;
+    int color = -1;
     uint64_t steamid = 0;
     int team = -1;
     int voice = 0;

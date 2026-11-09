@@ -986,7 +986,9 @@ function DemoView(props: {
   const teams = useMemo(() => {
     const out: Player[][] = [[], []]
     for (const p of roster?.players ?? []) if (p.team === 0 || p.team === 1) out[p.team].push(p)
-    for (const team of out) team.sort((a, b) => (b.stats?.damage ?? 0) - (a.stats?.damage ?? 0))
+    const score = (p: Player) => (p.stats && rating(p.stats)) ?? -1
+    for (const team of out)
+      team.sort((a, b) => score(b) - score(a) || (b.stats?.damage ?? 0) - (a.stats?.damage ?? 0))
     return out
   }, [roster])
   const labels = roster ? teamLabels(roster, me, t) : ['', '']
@@ -1185,7 +1187,7 @@ function DemoView(props: {
                     const r = p.stats ? rating(p.stats) : null
                     return (
                       <button key={p.slot} className={`pl-row${focused?.slot === p.slot ? ' on' : ''}`} onClick={() => setFocus(p.slot)}>
-                        <Avatar url={avatars[p.steamid]} name={p.name} />
+                        <Avatar url={avatars[p.steamid]} name={p.name} color={p.color} />
                         <span className="pl-who">
                           <span className="pl-name">{p.name || t('slot', { n: p.slot })}</span>
                           <SetupLine ping={p.stats?.ping} row={perf?.players.find(row => row.steamid === p.steamid)} />
@@ -1205,7 +1207,7 @@ function DemoView(props: {
             {focused?.stats && (
               <section className={`stats ${roster.teams[focused.team]?.side === 3 ? 'ct' : 't'}`}>
                 <div className="stats-head">
-                  <Avatar url={avatars[focused.steamid]} name={focused.name} />
+                  <Avatar url={avatars[focused.steamid]} name={focused.name} color={focused.color} />
                   <h2>{focused.name}</h2>
                   <span>{t('statsTitle')}</span>
                 </div>
@@ -1308,7 +1310,7 @@ function DemoView(props: {
                               send({ type: 'steam', id: p.steamid })
                             }}
                           >
-                            <Avatar url={avatars[p.steamid]} name={p.name} />
+                            <Avatar url={avatars[p.steamid]} name={p.name} color={p.color} />
                             <SteamIcon />
                           </span>
                           <span className="who">
@@ -1377,7 +1379,7 @@ function DemoView(props: {
               .filter(p => chosen.has(p.slot))
               .slice(0, 5)
               .map(p => (
-                <Avatar key={p.slot} url={avatars[p.steamid]} name={p.name} />
+                <Avatar key={p.slot} url={avatars[p.steamid]} name={p.name} color={p.color} />
               ))}
           </span>
           <span className="pill-count">{isOnly(everyone) ? t('everyone') : chosen.size === 1 ? t('playerOne') : t('playersCount', { n: chosen.size })}</span>
@@ -2128,7 +2130,7 @@ function Awards(props: { roster: Roster; avatars: Record<string, string>; mvp: n
             </span>
             <span className="award-badge">{c.label}</span>
             <span className="award-face">
-              <Avatar url={avatars[c.p.steamid]} name={c.p.name} />
+              <Avatar url={avatars[c.p.steamid]} name={c.p.name} color={c.p.color} />
               <span className="medal" aria-hidden="true">
                 <Icon />
               </span>
@@ -2228,7 +2230,7 @@ function Skins(props: { roster: Roster; teams: Player[][]; labels: string[]; ava
             <div className="pl-team">{labels[i]}</div>
             {teams[i].map(p => (
               <button key={p.slot} className={`pl-row sk-row${chosen?.slot === p.slot ? ' on' : ''}`} onClick={() => setPick(p.steamid)}>
-                <Avatar url={avatars[p.steamid]} name={p.name} />
+                <Avatar url={avatars[p.steamid]} name={p.name} color={p.color} />
                 <span className="pl-name">{p.name || t('slot', { n: p.slot })}</span>
                 <span className="pl-kda">{msg ? rows[p.steamid]?.items.length ?? 0 : ''}</span>
               </button>
@@ -2239,7 +2241,7 @@ function Skins(props: { roster: Roster; teams: Player[][]; labels: string[]; ava
       {chosen && (
         <section className={`sk-side ${roster.teams[chosen.team]?.side === 3 ? 'ct' : 't'}`}>
           <div className="stats-head sk-head">
-            <Avatar url={avatars[chosen.steamid]} name={chosen.name} />
+            <Avatar url={avatars[chosen.steamid]} name={chosen.name} color={chosen.color} />
             <h2>{chosen.name}</h2>
             <span>{row?.music ? t('skinsMusic', { name: row.music }) : ''}</span>
             <div className="sk-sides" role="tablist">
@@ -2582,7 +2584,7 @@ function CrosshairCard(props: { p: Player; avatar?: string; map: string; copied:
   return (
     <article className="xh-card">
       <div className="xh-head">
-        <Avatar url={avatar} name={p.name} />
+        <Avatar url={avatar} name={p.name} color={p.color} />
         <span>{p.name || t('slot', { n: p.slot })}</span>
       </div>
       <div ref={view} className="xh-view" style={map ? { backgroundImage: `url(https://cs2voice-maps.example/${map}.png)` } : undefined}>
