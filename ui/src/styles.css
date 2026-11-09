@@ -7071,6 +7071,7 @@ html.fs.idle * {
 }
 
 .rp-item-top > span:first-child {
+  flex: 1;
   overflow: hidden;
   text-overflow: ellipsis;
 }
@@ -7229,6 +7230,7 @@ html.fs.idle * {
   flex: 1;
   min-height: 0;
   overflow-y: auto;
+  scrollbar-gutter: stable;
   padding: 10px 8px;
 }
 
@@ -7238,7 +7240,25 @@ html.fs.idle * {
 
 .rp-right.picking .rp-picker {
   display: block;
-  animation: rp-picker 0.18s ease-out;
+  animation: rp-picker 0.22s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.rp-right:not(.picking) .rp-match {
+  animation: rp-match 0.32s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+@keyframes rp-match {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .rp-right.picking .rp-picker,
+  .rp-right:not(.picking) .rp-match {
+    animation: none;
+  }
 }
 
 .rp-picker .rp-notice {
@@ -8545,6 +8565,19 @@ html.fs.idle * {
 
 .rp-item-top .item-score {
   flex: none;
+}
+
+.rp-item-meta {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+  padding-right: 30px;
+}
+
+.rp-item-kda {
+  font: 500 13px var(--display);
+  font-variant-numeric: tabular-nums;
+  color: var(--faint);
 }
 
 .rp-item-steam {

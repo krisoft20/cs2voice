@@ -3,7 +3,7 @@ import { send, type Clip, type Demo, type Player, type PlayerState, type ReplayE
 import { Avatar, colorStyle, playerColor, useUi } from './common'
 import type { Key, T } from './i18n'
 import { ICONS, Icon, reasonOf } from './Details'
-import { AspectIcon, BombIcon, BookmarkIcon, CheckIcon, ChevronDownIcon, CloseIcon, CopyIcon, DemosIcon, DotsIcon, ExpandIcon, MuteIcon, PanelIcon, PauseIcon, PlayIcon, SaveIcon, ScissorsIcon, ShrinkIcon, SkipBackIcon, SkipForwardIcon, SkullIcon, StarIcon, StepBackIcon, StepForwardIcon, TargetIcon, TradeIcon, UsersIcon, VolumeIcon } from './icons'
+import { AspectIcon, BombIcon, BookmarkIcon, CheckIcon, ChevronDownIcon, CloseIcon, CopyIcon, DotsIcon, ExpandIcon, MuteIcon, PanelIcon, PauseIcon, PlayIcon, SaveIcon, ScissorsIcon, ShrinkIcon, SkipBackIcon, SkipForwardIcon, SkullIcon, StarIcon, StepBackIcon, StepForwardIcon, TargetIcon, TradeIcon, UsersIcon, VideoIcon, VolumeIcon } from './icons'
 import { weaponIcon, weaponName } from './items'
 import { source, when } from './voice'
 
@@ -871,10 +871,12 @@ export function ReplayList(props: {
                   <StarIcon />
                 </button>
               </span>
-              <span className="item-meta">{when(m.unix, t, lang)}</span>
+              <span className="item-meta rp-item-meta">
+                <span>{when(m.unix, t, lang)}</span>
+                {m.kda && <span className="rp-item-kda">{m.kda}</span>}
+              </span>
               <span className="item-tags">
                 <span className="tag">{modeOf(m, pair, t)}</span>
-                {m.kda && <span className="tag">{m.kda}</span>}
                 {pair && <span className="tag voice">{t('replayDemo')}</span>}
                 {m.saved && <span className="tag">{t(m.auto ? 'replayAutoTag' : 'replaySavedTag')}</span>}
                 {keep?.has(m.id) && !m.saved && <span className="tag rp-keep-tag">{t('replaySavedTag')}</span>}
@@ -1748,7 +1750,7 @@ export function ReplayView(props: {
       </div>
       <aside className={`rp-right${picking ? ' picking' : ''}`}>
         <button className="rp-switcher" onClick={() => setPicking(v => !v)} aria-expanded={picking}>
-          <DemosIcon />
+          <VideoIcon />
           <span>{t('replays')}</span>
           <small>{count}</small>
           <ChevronDownIcon />
