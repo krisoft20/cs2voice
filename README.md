@@ -16,6 +16,8 @@ Or get `cs2voice.exe` from the [latest release](https://github.com/krisoft20/cs2
 
 cs2voice is free and only comes from this repo and its [Microsoft Store page](https://apps.microsoft.com/detail/9pdv2hrck9ws). Anything else is fake, [report it](https://github.com/krisoft20/cs2voice/issues).
 
+cs2voice.com is a different, paid web service and has nothing to do with this app.
+
 ## Requirements
 
 - Windows 10 or 11, 64-bit
