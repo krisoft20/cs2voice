@@ -22,6 +22,7 @@ namespace replays {
     const int AUTO_FIRST = 30;
     const int AUTO_EVERY = 120;
     const double LIVE_DONE_GAP = 60;
+    const double AUTO_MIN_LENGTH = 300;
 
     std::wstring g_root;
 
@@ -116,6 +117,7 @@ namespace replays {
         bool saved = false;
         bool done = false;
         bool autosave = false;
+        bool stale = false;
         double start = 0;
         double origin = 0;
         bool video = false;
@@ -338,7 +340,10 @@ namespace replays {
             r.saved = true;
             const json_t* a = json::at(j, "auto");
             r.autosave = a && a->kind == jk_bool && a->b;
-            if (auto it = rows.find(id); it != rows.end())
+            double len = json::num(json::at(j, "duration"));
+            auto it = rows.find(id);
+            r.stale = r.autosave && (len < AUTO_MIN_LENGTH || (it != rows.end() && it->second.length > len + LIVE_DONE_GAP));
+            if (it != rows.end())
                 fill_events(r, j, it->second);
             rows[id] = r;
         } while (FindNextFileW(h, &fd));
@@ -541,12 +546,12 @@ namespace replays {
         if (left > 0) {
             std::lock_guard<std::mutex> lock(g_skip_mu);
             for (const row_t* r : order) {
-                bool keep = left > 0 && (r->saved || (r->done && !g_skip.count(r->id)));
+                bool keep = left > 0 && !r->stale && (r->saved || (r->done && r->length >= AUTO_MIN_LENGTH && !g_skip.count(r->id)));
                 if (keep)
                     left--;
                 if (keep && !r->saved && fresh.empty() && !g_skip.count(r->id))
                     fresh = r->id;
-                if (!keep && r->saved && r->autosave && stale.empty())
+                if ((!keep || r->stale) && r->saved && r->autosave && stale.empty())
                     stale = r->id;
             }
         }
