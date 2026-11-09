@@ -146,8 +146,10 @@ void measure(const match_t& m, const map_geo_t* g, const vis_t* v, int slot, per
             if (seen_at < 0)
                 continue;
             int on = onset_of(m, *g, *v, slot, h.victim, seen_at, look);
-            if (on >= 0)
+            if (on >= 0) {
                 out.ttd_ms.push_back((h.tick - on) * dt * 1000.0);
+                out.ttd_at.push_back({h.tick, h.victim, out.ttd_ms.back()});
+            }
         }
 
         std::vector<double> clicks;
@@ -174,14 +176,18 @@ void measure(const match_t& m, const map_geo_t* g, const vis_t* v, int slot, per
                     bool alone = (mask & ~(1ull << en.slot)) == 0;
                     if (sp && se && (sp->flags & pf_live) && t0 - last_vis >= gap && alone) {
                         float pitch, yaw;
-                        if (model::view_at(m, slot, t0, pitch, yaw))
+                        if (model::view_at(m, slot, t0, pitch, yaw)) {
                             out.placement_deg.push_back(geom::angle_between(geom::forward(pitch, yaw), geom::sub(eye_of(*se), eye_of(*sp))));
+                            out.placement_at.push_back({t0, en.slot, out.placement_deg.back()});
+                        }
                         bool held = false;
                         for (const press_t& pr : pl.presses)
                             held |= pr.down <= t0 && pr.up >= t0;
                         auto c = std::upper_bound(clicks.begin(), clicks.end(), (double)t0);
-                        if (!held && c != clicks.end() && *c - t0 < second)
+                        if (!held && c != clicks.end() && *c - t0 < second) {
                             out.reaction_ms.push_back((*c - t0) * dt * 1000.0);
+                            out.reaction_at.push_back({t0, en.slot, out.reaction_ms.back()});
+                        }
                     }
                 }
                 if (now)

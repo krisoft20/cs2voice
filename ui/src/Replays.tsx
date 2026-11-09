@@ -3,9 +3,12 @@ import { send, type Clip, type Demo, type Player, type PlayerState, type ReplayE
 import { Avatar, colorStyle, playerColor, useUi } from './common'
 import type { Key, T } from './i18n'
 import { ICONS, Icon, reasonOf } from './Details'
-import { AspectIcon, BombIcon, BookmarkIcon, CheckIcon, ChevronDownIcon, CloseIcon, CopyIcon, DotsIcon, ExpandIcon, MuteIcon, PanelIcon, PauseIcon, PlayIcon, SaveIcon, ScissorsIcon, ShrinkIcon, SkipBackIcon, SkipForwardIcon, SkullIcon, StarIcon, StepBackIcon, StepForwardIcon, TargetIcon, TradeIcon, UsersIcon, VideoIcon, VolumeIcon } from './icons'
+import { AspectIcon, BombIcon, BookmarkIcon, CheckIcon, ChevronDownIcon, CloseIcon, CopyIcon, DotsIcon, ExpandIcon, MicIcon, MuteIcon, PanelIcon, PauseIcon, PlayIcon, RestartIcon, SaveIcon, ScissorsIcon, ShrinkIcon, SkipBackIcon, SkipForwardIcon, SkullIcon, StarIcon, StepBackIcon, StepForwardIcon, TargetIcon, TradeIcon, UsersIcon, VideoIcon, VolumeIcon } from './icons'
 import { weaponIcon, weaponName } from './items'
-import { source, when } from './voice'
+import { source, teamLabels, when } from './voice'
+import { open as openVoice, parse as parseVoice, renderClip } from './voicedata'
+import * as engine from './player'
+import { sideOf } from './Summary'
 
 export type ReplaysData = { folder: string; background: number; keep: number; rate?: number; buffer?: number; length?: number; free?: number; saved_dir?: string; matches: ReplayMatch[] }
 
@@ -57,6 +60,8 @@ const FRAME_TEXT_HZ = 10
 const CLIP_PAD = 6
 const CLIP_MIN = 0.5
 const CLIP_AFTER = 5
+const FOLLOW_LEAD = 0.15
+const TALK_DRIFT = 0.12
 const STREAK_GAP = 8
 const AUDIO_BPS = 210000
 const BPP_MIN = 0.07
@@ -407,6 +412,50 @@ const clipSpec = (max: number, dur: number, sw: number, sh: number, px: number):
 
 const megabytes = (bytes: number) => `${bytes >= 10e6 ? Math.round(bytes / 1e6) : (bytes / 1e6).toFixed(1)} MB`
 
+const TALK_TAIL = 0.6
+const TALK_MAX = 8
+
+type Talk = {
+  groups: { label: string; side: number; players: Player[] }[]
+  on: Set<string>
+  toggle: (steamid: string) => void
+  avatars: Record<string, string>
+  ready: boolean
+}
+
+function TalkPick(props: { talk: Talk }) {
+  const { groups, on, toggle, avatars, ready } = props.talk
+  const { t } = useUi()
+  const [open, setOpen] = useState(false)
+  const chosen = groups.flatMap(g => g.players).filter(p => on.has(p.steamid))
+  return (
+    <div className="rp-presetpick rp-talkpick">
+      <button className={open ? 'on' : ''} onClick={() => setOpen(v => !v)} aria-expanded={open}>
+        <MicIcon />
+        <span>{t('clipVoice')}</span>
+        <small>{!ready && chosen.length ? t('clipVoiceReading') : chosen.length === 1 ? chosen[0].name : chosen.length ? t('playersCount', { n: chosen.length }) : t('clipVoiceOff')}</small>
+        <ChevronDownIcon />
+      </button>
+      {open && (
+        <div className="rp-presetmenu rp-talkmenu" role="menu">
+          {groups.map(g => (
+            <div key={g.label} className={`rp-talkgroup ${g.side === 3 ? 'ct' : 't'}`}>
+              <div className="rp-talkteam">{g.label}</div>
+              {g.players.map(p => (
+                <button key={p.steamid} role="menuitemcheckbox" aria-checked={on.has(p.steamid)} className={on.has(p.steamid) ? 'on' : ''} onClick={() => toggle(p.steamid)}>
+                  <Avatar url={avatars[p.steamid]} name={p.name} color={p.color} />
+                  <span>{p.name}</span>
+                  {on.has(p.steamid) && <CheckIcon />}
+                </button>
+              ))}
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  )
+}
+
 function ClipEditor(props: {
   range: Span
   setRange: (r: Span) => void
@@ -422,8 +471,10 @@ function ClipEditor(props: {
   onPause: () => void
   onMake: (preset: string, spec: ClipSpec) => void
   onClose: () => void
+  talk: Talk | null
+  ext: number
 }) {
-  const { range, setRange, from, to, at, playing, ticker, sw, sh, px, onSeek, onPause, onMake, onClose } = props
+  const { range, setRange, from, to, at, playing, ticker, sw, sh, px, onSeek, onPause, onMake, onClose, talk, ext } = props
   const head = useRef<HTMLSpanElement>(null)
   const { t } = useUi()
   const zoom = useRef<HTMLDivElement>(null)
@@ -432,11 +483,11 @@ function ClipEditor(props: {
     const pad = Math.max(CLIP_PAD, (r[1] - r[0]) * 0.4)
     return [Math.max(from, r[0] - pad), Math.min(to, r[1] + pad)]
   }
-  const [view, setView] = useState<Span>(() => frameOf(range))
+  const [view, setView] = useState<Span>(() => frameOf([range[0], range[1] + ext]))
   const [preview, setPreview] = useState(false)
   const [menu, setMenu] = useState(false)
   const [preset, setPreset] = useState(() => stored('clipPreset') ?? 'discord20')
-  const dur = range[1] - range[0]
+  const dur = range[1] + ext - range[0]
   const specs = PRESETS.map(p => ({ ...p, spec: clipSpec(p.max, dur, sw, sh, px) }))
   const chosen = specs.find(p => p.id === preset && !p.spec.long) ?? specs[0]
   const full = clipSpec(0, dur, sw, sh, px)
@@ -444,21 +495,40 @@ function ClipEditor(props: {
     s.long ? t('clipTooLong') : `${s.height}p ${s.fps} fps, ${s.bitrate === full.bitrate ? `~${megabytes(s.bytes)}` : t('clipUpTo', { size: megabytes(max) })}${s.rough ? `, ${t('clipRough')}` : ''}`
 
   useEffect(() => {
-    if (!drag.current) setView(frameOf(range))
-  }, [range[0], range[1]])
+    if (!drag.current) setView(frameOf([range[0], range[1] + ext]))
+  }, [range[0], range[1], ext])
 
+  const started = useRef(false)
   useEffect(() => {
-    if (preview && !playing) setPreview(false)
+    if (!preview) started.current = false
+    else if (playing) started.current = true
+    else if (started.current) setPreview(false)
   }, [preview, playing])
 
   const pos = (v: number) => ((v - view[0]) / Math.max(0.001, view[1] - view[0])) * 100
+  const cur = useRef(range[0])
   ticker.current = v => {
+    cur.current = v
     const el = head.current
     if (el) {
       el.style.display = v >= view[0] && v <= view[1] ? '' : 'none'
       el.style.left = `${pos(v)}%`
     }
-    if (preview && playing && v >= range[1]) onSeek(range[0], true)
+    if (!drag.current && (v < view[0] || v > view[1])) {
+      const w = view[1] - view[0]
+      const a = Math.min(Math.max(from, v - w * FOLLOW_LEAD), Math.max(from, to - w))
+      setView([a, a + w])
+    }
+    if (preview && playing && v >= range[1] + ext) onSeek(range[0], true)
+  }
+  const len = range[1] - range[0]
+  const startHere = () => {
+    const v = Math.min(Math.max(cur.current, from), to - CLIP_MIN)
+    setRange(v <= range[1] - CLIP_MIN ? [v, range[1]] : [v, Math.min(to, v + len)])
+  }
+  const endHere = () => {
+    const v = Math.min(Math.max(cur.current, from + CLIP_MIN), to)
+    setRange(v >= range[0] + CLIP_MIN ? [range[0], v] : [Math.max(from, v - len), v])
   }
   useEffect(() => () => {
     ticker.current = null
@@ -485,7 +555,7 @@ function ClipEditor(props: {
   }
   const drop = () => {
     drag.current = null
-    setView(frameOf(range))
+    setView(frameOf([range[0], range[1] + ext]))
   }
   const step = view[1] - view[0] > 90 ? 10 : view[1] - view[0] > 30 ? 5 : 1
   const ticks: number[] = []
@@ -504,6 +574,7 @@ function ClipEditor(props: {
         })}
         <span className="rp-clipshade" style={{ left: 0, width: `${pos(range[0])}%` }} />
         <span className="rp-clipshade" style={{ left: `${pos(range[1])}%`, right: 0 }} />
+        {ext > 0 && <span className="rp-clipext" style={{ left: `${pos(range[1])}%`, width: `${Math.max(0, Math.min(100, pos(range[1] + ext)) - pos(range[1]))}%` }} />}
         <span
           className="rp-clipwin"
           style={{ left: `${pos(range[0])}%`, width: `${pos(range[1]) - pos(range[0])}%` }}
@@ -521,6 +592,9 @@ function ClipEditor(props: {
         <span className="rp-cliphead" ref={head} />
       </div>
       <div className="rp-clipctl">
+        <button className="rp-ctl" onClick={() => onSeek(range[0])} aria-label={t('clipToStart')} title={t('clipToStart')}>
+          <RestartIcon />
+        </button>
         <button
           className={`rp-ctl${preview ? ' on' : ''}`}
           onClick={() => {
@@ -536,6 +610,10 @@ function ClipEditor(props: {
         >
           {preview ? <PauseIcon /> : <PlayIcon />}
         </button>
+        <span className="rp-clipmarks">
+          <button onClick={startHere}>{t('clipStartHere')}</button>
+          <button onClick={endHere}>{t('clipEndHere')}</button>
+        </span>
         <span className="rp-cliplen">{dur.toFixed(1)} s</span>
         <div className="rp-presetpick">
           <button className={menu ? 'on' : ''} onClick={() => setMenu(v => !v)} aria-expanded={menu}>
@@ -565,6 +643,7 @@ function ClipEditor(props: {
             </div>
           )}
         </div>
+        {talk && <TalkPick talk={talk} />}
         <span className="rp-clipgrow" />
         <button className="ghost" onClick={onClose}>
           {t('cancel')}
@@ -1037,9 +1116,10 @@ export function ReplayView(props: {
   start?: number
   keep: number
   onSave: (keep: number[], cuts: Span[]) => void
+  voice: { path: string; data?: ArrayBuffer; err: string } | null
 }) {
   const { t } = useUi()
-  const { m, player, demos, rosters, me, avatars, icons, fullscreen, picker, count, saving, table, clips, onClip, onOpenClips, startPicking, start: startAt, keep, onSave } = props
+  const { m, player, demos, rosters, me, avatars, icons, fullscreen, picker, count, saving, table, clips, onClip, onOpenClips, startPicking, start: startAt, keep, onSave, voice } = props
   const [range, setRange] = useState<Span | null>(null)
   const [toast, setToast] = useState<string | null>(null)
   const toastClip = toast ? clips.find(c => c.id === toast) ?? null : null
@@ -1394,6 +1474,7 @@ export function ReplayView(props: {
     const frameText = preciseClock(playing ? Math.floor(t * FRAME_TEXT_HZ) / FRAME_TEXT_HZ - at : t - at)
     if (frameEl.current && frameEl.current.textContent !== frameText) frameEl.current.textContent = frameText
     clipTicker.current?.(t)
+    talkSync.current?.(t)
   }
   const clusters = useMemo(() => {
     const out: { x: number; items: Moment[] }[] = []
@@ -1422,13 +1503,97 @@ export function ReplayView(props: {
     for (let k = i + 1; k < shown.length && shown[k].kind === mo.kind && shown[k].t - end <= STREAK_GAP; k++) end = shown[k].t
     clipAround(mo.t - HL_BEFORE, end + HL_AFTER)
   }
-  const makeClip = (preset: string, spec: ClipSpec) => {
+  const talkPath = pair && pair.roster.voice > 0 ? pair.demo.path : ''
+  const [talkers, setTalkers] = useState<Set<string>>(new Set())
+  useEffect(() => {
+    if (range && talkers.size && talkPath && voice?.path !== talkPath) send({ type: 'voice', path: talkPath })
+  }, [!!range, talkers.size > 0, talkPath])
+  const talkData = useMemo(() => (talkPath && voice?.path === talkPath && voice.data ? parseVoice(voice.data) : null), [talkPath, voice])
+  const talk = useMemo<Talk | null>(() => {
+    if (!pair || !talkPath) return null
+    const r = pair.roster
+    const mine = r.players.find(p => p.steamid === me)?.team
+    let round = 0
+    ;(r.round_info ?? []).forEach((ri, k) => {
+      if (ri.start * TICK + pair.offset <= (range?.[0] ?? 0)) round = k
+    })
+    const labels = teamLabels(r, me, t)
+    const order = mine === undefined ? [0, 1] : [1 - mine, mine]
+    return {
+      groups: order.map(team => ({ label: labels[team], side: sideOf(r, team, round), players: r.players.filter(p => p.team === team && p.voice > 0) })).filter(g => g.players.length),
+      on: talkers,
+      toggle: id =>
+        setTalkers(s => {
+          const next = new Set(s)
+          if (!next.delete(id)) next.add(id)
+          return next
+        }),
+      avatars,
+      ready: !!talkData,
+    }
+  }, [pair, talkPath, talkers, talkData, range?.[0], me, avatars, t])
+  const extOf = (end: number) => {
+    if (!pair || !talkData || !talkers.size) return 0
+    const e = end - pair.offset
+    let out = e
+    for (const s of talkData.spurts) if (s.start < e && s.end > e && talkers.has(talkData.speakers[s.speaker])) out = Math.max(out, s.end + TALK_TAIL)
+    return Math.max(0, Math.min(out - e, TALK_MAX, to - end))
+  }
+  const ext = range ? extOf(range[1]) : 0
+
+  const talkSync = useRef<((t: number) => void) | null>(null)
+  const talkEngine = useRef<engine.Player | null>(null)
+  const videoClock = useRef({ playing, rate: player?.rate ?? 1 })
+  videoClock.current = { playing, rate: player?.rate ?? 1 }
+  const hearing = !!range && !!pair && !!talkData && talkers.size > 0
+  useEffect(() => {
+    if (!hearing || !pair || !talkData) return
+    const src = openVoice(talkData, () => {}, false)
+    const p = engine.create(talkData, src.load)
+    const audible = (sp: number) => talkers.has(talkData.speakers[sp])
+    talkData.speakers.forEach((_, i) => engine.setAudible(p, i, audible(i)))
+    talkEngine.current = p
+    talkSync.current = v => {
+      const want = v - pair.offset
+      if (!videoClock.current.playing) {
+        if (p.playing) engine.pause(p)
+        return
+      }
+      if (p.rate !== videoClock.current.rate) engine.setRate(p, videoClock.current.rate)
+      if (!p.playing || Math.abs(engine.now(p) - want) > TALK_DRIFT) engine.play(p, want)
+      engine.tick(p, audible)
+    }
+    return () => {
+      talkSync.current = null
+      talkEngine.current = null
+      engine.destroy(p)
+      src.close()
+    }
+  }, [hearing, pair, talkData, talkers])
+  useEffect(() => {
+    const p = talkEngine.current
+    if (!playing && p?.playing) engine.pause(p)
+  }, [playing])
+
+  const makeClip = async (preset: string, spec: ClipSpec) => {
     if (!range || !m.video) return
     const name = clipTitle(m, pair, me, range, t)
     const id = `${m.id}@${Date.now()}`
+    const end = range[1] + ext
     onClip({ id, name, match: m.id, preset, state: 'making', p: 0, path: '', bytes: 0, err: '' })
     setToast(id)
-    send({ type: 'clip_make', id, video: m.video, from: range[0], to: range[1], name, width: spec.width & ~1, height: spec.height, fps: spec.fps, bitrate: spec.bitrate, max_bytes: PRESETS.find(p => p.id === preset)?.max ?? 0, match: m.id, map: m.map, tag: '' })
+    let wav = ''
+    if (pair && talkData && talkers.size) {
+      const src = openVoice(talkData, () => {}, false)
+      try {
+        wav = await renderClip(talkData, src.load, range[0] - pair.offset, end - pair.offset, sp => talkers.has(talkData.speakers[sp]))
+      } catch {
+        wav = ''
+      } finally {
+        src.close()
+      }
+    }
+    send({ type: 'clip_make', id, video: m.video, from: range[0], to: end, name, width: spec.width & ~1, height: spec.height, fps: spec.fps, bitrate: spec.bitrate, max_bytes: PRESETS.find(p => p.id === preset)?.max ?? 0, match: m.id, map: m.map, tag: '', voice: wav })
   }
 
   const self = view.me
@@ -1561,6 +1726,8 @@ export function ReplayView(props: {
                 setRange(null)
               }}
               onClose={() => setRange(null)}
+              talk={talk}
+              ext={ext}
             />
           )}
           <div className="rp-scrub">

@@ -1580,6 +1580,38 @@ button:focus-visible {
   margin: 0;
 }
 
+.players-pane {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+}
+
+.players-pane .players {
+  flex: 1;
+  min-height: 0;
+  align-items: stretch;
+  padding-right: 10px;
+}
+
+.players-pane .player-list,
+.players-pane .stats {
+  min-height: 0;
+  overflow-y: auto;
+  padding-bottom: 80px;
+}
+
+.players-pane .player-list {
+  position: static;
+  align-content: start;
+  scrollbar-width: none;
+}
+
+.players-pane .stats {
+  margin: -4px 0 0 -4px;
+  padding: 4px 22px 80px 4px;
+  scrollbar-gutter: stable;
+}
+
 .players .tiles {
   grid-template-columns: repeat(3, minmax(0, 1fr));
 }
@@ -1681,6 +1713,7 @@ button:focus-visible {
 .tiles {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
+  grid-auto-flow: row dense;
   gap: 10px;
 }
 
@@ -1727,6 +1760,292 @@ button:focus-visible {
   margin-left: 2px;
   font-size: 18px;
   color: var(--muted);
+}
+
+.tile.drill {
+  text-align: left;
+  font: inherit;
+  color: inherit;
+  cursor: pointer;
+  transition: border-color 0.15s, background-color 0.15s;
+}
+
+.tile.drill:hover {
+  border-color: var(--faint);
+}
+
+.tile.drill.open {
+  border-color: var(--text);
+  background: var(--raised);
+}
+
+.tile.drill .tile-label {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+}
+
+.tile.drill .tile-label svg {
+  width: 14px;
+  height: 14px;
+  flex: none;
+  color: var(--faint);
+  transition: transform 0.2s cubic-bezier(0.16, 1, 0.3, 1), color 0.15s;
+}
+
+.tile.drill:hover .tile-label svg,
+.tile.drill.open .tile-label svg {
+  color: var(--text);
+}
+
+.tile.drill.open .tile-label svg {
+  transform: rotate(180deg);
+}
+
+.moments {
+  grid-column: 1 / -1;
+  scroll-margin: 12px;
+  padding: 10px 6px 6px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--panel);
+  animation: mo-in 0.24s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+@keyframes mo-in {
+  from {
+    opacity: 0;
+    transform: translateY(-6px);
+  }
+}
+
+.mo-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 0 4px 8px 8px;
+}
+
+.mo-head h3 {
+  margin: 0;
+  font: 600 17px/1 var(--display);
+}
+
+.mo-count {
+  color: var(--muted);
+  font: 600 17px/1 var(--display);
+  font-variant-numeric: tabular-nums;
+}
+
+.mo-close {
+  display: grid;
+  place-items: center;
+  width: 30px;
+  height: 30px;
+  margin-left: auto;
+  border: 0;
+  border-radius: 5px;
+  background: none;
+  color: var(--muted);
+  cursor: pointer;
+}
+
+.mo-close:hover {
+  background: var(--raised);
+  color: var(--text);
+}
+
+.mo-close svg {
+  width: 16px;
+  height: 16px;
+}
+
+.mo-list {
+  display: grid;
+  gap: 1px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.mo-row {
+  display: grid;
+  grid-template-columns: 70px 36px 76px 96px minmax(0, 1fr) auto auto;
+  align-items: center;
+  gap: 12px;
+  padding: 5px 6px 5px 8px;
+  border-radius: 5px;
+  font: 500 15px var(--display);
+}
+
+.mo-row:hover {
+  background: var(--raised);
+}
+
+.mo-round {
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.mo-time {
+  color: var(--faint);
+  font: 500 13px var(--ui);
+  font-variant-numeric: tabular-nums;
+}
+
+.mo-kind {
+  color: var(--muted);
+  font: 600 12px var(--display);
+  letter-spacing: 0.03em;
+}
+
+.mo-row.bad .mo-kind {
+  color: var(--bad);
+}
+
+.mo-kind {
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+
+.mo-kast {
+  display: inline-flex;
+  gap: 3px;
+}
+
+.mo-kast b {
+  display: grid;
+  place-items: center;
+  width: 15px;
+  height: 17px;
+  border-radius: 3px;
+  background: var(--raised);
+  color: var(--faint);
+  font: 600 11px var(--display);
+}
+
+.mo-kast b.on {
+  background: color-mix(in srgb, var(--signal) 22%, transparent);
+  color: var(--signal);
+}
+
+.mo-gun {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  min-width: 0;
+}
+
+.mo-weapon {
+  height: 17px;
+  width: auto;
+  max-width: 60px;
+  object-fit: contain;
+  opacity: 0.85;
+}
+
+.mo-flag {
+  width: 15px;
+  height: 15px;
+  object-fit: contain;
+}
+
+.mo-other {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.mo-other .avatar {
+  width: 22px;
+  height: 22px;
+  flex: none;
+  border-radius: 50%;
+  font-size: 11px;
+}
+
+.mo-other span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.mo-other.t span {
+  color: var(--t);
+}
+
+.mo-other.ct span {
+  color: var(--ct);
+}
+
+.mo-tags {
+  display: flex;
+  justify-content: flex-end;
+  gap: 4px;
+}
+
+.mo-tags em {
+  padding: 1px 6px;
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  color: var(--muted);
+  font: 600 11px var(--display);
+  font-style: normal;
+  letter-spacing: 0.03em;
+}
+
+.mo-go {
+  display: flex;
+  gap: 4px;
+}
+
+.mo-go button {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 9px;
+  border: 1px solid transparent;
+  border-radius: 5px;
+  background: none;
+  color: var(--muted);
+  font: 600 13px var(--display);
+  cursor: pointer;
+  transition: color 0.15s, border-color 0.15s;
+}
+
+.mo-row:hover .mo-go button {
+  border-color: var(--line);
+}
+
+.mo-go button:hover:not(:disabled) {
+  border-color: var(--faint);
+  color: var(--text);
+}
+
+.mo-go button:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
+.mo-go button.done {
+  border-color: var(--signal);
+  color: var(--signal);
+}
+
+.mo-go button svg {
+  width: 13px;
+  height: 13px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .moments,
+  .tile.drill .tile-label svg {
+    animation: none;
+    transition: none;
+  }
 }
 
 .hist {
@@ -7549,6 +7868,29 @@ html.fs.idle * {
   gap: 8px;
 }
 
+.rp-clipmarks {
+  display: flex;
+  gap: 2px;
+  padding: 2px;
+  border-radius: 7px;
+  background: #1f242c;
+}
+
+.rp-clipmarks button {
+  height: 28px;
+  padding: 0 10px;
+  border-radius: 5px;
+  color: var(--muted);
+  font: 600 13px var(--display);
+  white-space: nowrap;
+  transition: color 0.15s, background-color 0.15s;
+}
+
+.rp-clipmarks button:hover {
+  background: #2a313b;
+  color: var(--text);
+}
+
 .rp-cliplen {
   min-width: 52px;
   font: 600 15px var(--display);
@@ -7629,6 +7971,82 @@ html.fs.idle * {
 
 .rp-presetmenu button:disabled {
   opacity: 0.4;
+}
+
+.rp-talkpick > button > svg:first-child {
+  width: 15px;
+  height: 15px;
+  transform: none;
+}
+
+.rp-talkpick > button.on > svg:first-child {
+  transform: none;
+}
+
+.rp-talkmenu {
+  min-width: 240px;
+  gap: 8px;
+}
+
+.rp-talkgroup {
+  display: grid;
+  gap: 1px;
+}
+
+.rp-talkteam {
+  padding: 2px 10px 4px;
+  font: 600 12px var(--display);
+  letter-spacing: 0.03em;
+}
+
+.rp-talkgroup.t .rp-talkteam {
+  color: var(--t);
+}
+
+.rp-talkgroup.ct .rp-talkteam {
+  color: var(--ct);
+}
+
+.rp-talkmenu button {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding: 5px 10px;
+}
+
+.rp-talkmenu button span {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.rp-talkmenu .avatar {
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  font-size: 11px;
+}
+
+.rp-talkmenu button svg {
+  width: 15px;
+  height: 15px;
+  color: var(--text);
+}
+
+.rp-talkmenu button:not(.on) span {
+  color: var(--muted);
+}
+
+.rp-clipext {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  border: 1px dashed color-mix(in srgb, var(--text) 55%, transparent);
+  border-left: 0;
+  border-radius: 0 4px 4px 0;
+  background: color-mix(in srgb, var(--text) 8%, transparent);
+  pointer-events: none;
 }
 
 .rp-clipgo {
@@ -8794,4 +9212,9 @@ html.fs.idle * {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.mo-tags em.bad {
+  border-color: color-mix(in srgb, var(--bad) 45%, transparent);
+  color: var(--bad);
 }

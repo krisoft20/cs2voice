@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useId, useLayoutEffect, useMemo, useRef, useState } from 'react'
+import { Fragment, useCallback, useEffect, useId, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import type { ReactNode } from 'react'
 import { listen, send, type Clip, type ClipFile, type PlayerState, type ReplayMatch, type CleanupCfg, type SetupInfo, type Demo, type FaceitPlayer, type Folder, type HistoryMatch, type Player, type Profile, type Roster, type Stats, type Storage, type PerfMsg, type PerfRow, type SkinsMsg, type SkinItem } from './bridge'
 import { LANGS, gameLang, resolve, translator, type Key, type Lang, type LangChoice } from './i18n'
@@ -13,6 +13,7 @@ import { ReplayList, ReplayFirst, ReplayNotice, ReplayView, replayScore, type Re
 import { ClipsPage } from './Clips'
 import { Details } from './Details'
 import { MEASURES, bins, median, rating, type Measure } from './stats'
+import { DRILLS, Moments, momentsOf, type Drill } from './Moments'
 import { REFERENCE } from './reference'
 import { Radar, type RadarInfo } from './Radar'
 import { usePlayback } from './playback'
@@ -545,6 +546,7 @@ export default function App() {
                 startPicking={replayPicker}
                 start={replayStart?.id === replayMatch.id ? replayStart.t : undefined}
                 keep={replays?.keep ?? 10}
+                voice={voice}
                 onOpenClips={() => setPage('clips')}
                 onSave={(keep, cuts) => {
                   setSaving(s => ({ ...s, [replayMatch.id]: 0 }))
@@ -1039,6 +1041,25 @@ function DemoView(props: {
   const perfWait = !!roster && !perf
   const voiceWait = !!roster && (partial || (hasVoice && !voice))
   const radarWait = !!roster && (partial || !track)
+  const [drill, setDrill] = useState<Drill | null>(null)
+  const closeDrill = useCallback(() => setDrill(null), [])
+
+  const openVoices = () => {
+    setTab('voices')
+    setSeenVoices(true)
+    if (!voice && hasVoice) send({ type: 'voice', path: demo.path })
+  }
+  const openRadar = () => {
+    setTab('radar')
+    if (!track) send({ type: 'track', path: demo.path })
+    if (!voice && hasVoice) send({ type: 'voice', path: demo.path })
+    if (!radar && roster) send({ type: 'radar', map: roster.map })
+  }
+  const jump = (to: 'radar' | 'voices', at: number) => {
+    if (to === 'radar') openRadar()
+    else openVoices()
+    pb.seek(at)
+  }
 
   useEffect(() => {
     if (!roster || partial || !hasTabs) return
@@ -1127,28 +1148,11 @@ function DemoView(props: {
               <TabSpin on={statsWait} />
               {t('tabDetails')}
             </button>
-            <button
-              className={tab === 'voices' ? 'on' : ''}
-              onClick={() => {
-                setTab('voices')
-                setSeenVoices(true)
-                if (!voice && hasVoice) send({ type: 'voice', path: demo.path })
-              }}
-              disabled={partial}
-            >
+            <button className={tab === 'voices' ? 'on' : ''} onClick={openVoices} disabled={partial}>
               <TabSpin on={voiceWait} />
               {t('tabVoices')}
             </button>
-            <button
-              className={tab === 'radar' ? 'on' : ''}
-              onClick={() => {
-                setTab('radar')
-                if (!track) send({ type: 'track', path: demo.path })
-                if (!voice && hasVoice) send({ type: 'voice', path: demo.path })
-                if (!radar && roster) send({ type: 'radar', map: roster.map })
-              }}
-              disabled={partial}
-            >
+            <button className={tab === 'radar' ? 'on' : ''} onClick={openRadar} disabled={partial}>
               <TabSpin on={radarWait} />
               {t('tabRadar')}
             </button>
@@ -1177,7 +1181,7 @@ function DemoView(props: {
       )}
 
       {roster && hasStats && tab === 'players' && (
-        <div className="scroll pane">
+        <div className="pane players-pane">
           <div className="players">
             <nav className="player-list" aria-label={t('tabPlayers')}>
               {[0, 1].map(i => (
@@ -1212,16 +1216,68 @@ function DemoView(props: {
                   <span>{t('statsTitle')}</span>
                 </div>
                 <div className="tiles">
-                  {MEASURES.map(m => (
-                    <Tile key={m.key} measure={m} stats={focused.stats!} pool={pool} />
-                  ))}
-                  {PERF_TILES.map(k => {
+                  {(() => {
                     const row = perf?.players.find(r => r.steamid === focused.steamid)
-                    return <PerfTile key={k.key} kind={k} value={row ? row[k.key] : null} n={row ? row[`${k.key}_n`] : 0} waiting={!perf} />
-                  })}
-                  {SHOT_TILES.map(k => (
-                    <ShotTile key={k.key} kind={k} row={perf?.players.find(r => r.steamid === focused.steamid)} waiting={!perf} />
-                  ))}
+                    const drillOf = (key: string) => {
+                      const kind = DRILLS.find(d => d === key)
+                      const n = kind ? momentsOf(roster, focused.slot, kind, row, trackParsed).length : 0
+                      if (!kind || !n) return { open: undefined, onOpen: undefined, panel: null }
+                      return {
+                        open: drill === kind,
+                        onOpen: () => setDrill(drill === kind ? null : kind),
+                        panel:
+                          drill === kind ? (
+                            <Moments
+                              key={focused.slot}
+                              roster={roster}
+                              player={focused}
+                              kind={kind}
+                              label={kind}
+                              perf={row}
+                              track={trackParsed}
+                              avatars={avatars}
+                              icons={icons}
+                              copied={copied}
+                              radar={!partial}
+                              voices={!partial && hasVoice}
+                              onJump={jump}
+                              onClose={closeDrill}
+                            />
+                          ) : null,
+                      }
+                    }
+                    return (
+                      <>
+                        {MEASURES.map(m => {
+                          const d = drillOf(m.key)
+                          return (
+                            <Fragment key={m.key}>
+                              <Tile measure={m} stats={focused.stats!} pool={pool} open={d.open} onOpen={d.onOpen} />
+                              {d.panel}
+                            </Fragment>
+                          )
+                        })}
+                        {PERF_TILES.map(k => {
+                          const d = drillOf(k.key)
+                          return (
+                            <Fragment key={k.key}>
+                              <PerfTile kind={k} value={row ? row[k.key] : null} n={row ? row[`${k.key}_n`] : 0} waiting={!perf} open={d.open} onOpen={d.onOpen} />
+                              {d.panel}
+                            </Fragment>
+                          )
+                        })}
+                        {SHOT_TILES.map(k => {
+                          const d = drillOf(k.key)
+                          return (
+                            <Fragment key={k.key}>
+                              <ShotTile kind={k} row={row} waiting={!perf} open={d.open} onOpen={d.onOpen} />
+                              {d.panel}
+                            </Fragment>
+                          )
+                        })}
+                      </>
+                    )
+                  })()}
                 </div>
               </section>
             )}
@@ -2155,18 +2211,31 @@ const PERF_TILES: { key: 'ttd' | 'reaction' | 'placement'; unit: string; digits:
   { key: 'placement', unit: '°', digits: 1 },
 ]
 
-function PerfTile(props: { kind: (typeof PERF_TILES)[number]; value: number | null; n: number; waiting: boolean }) {
-  const { t, lang } = useUi()
-  const { kind, value, n, waiting } = props
+function TileBox(props: { label: string; open?: boolean; onOpen?: () => void; children: ReactNode }) {
+  const { label, open, onOpen, children } = props
+  const Box = onOpen ? 'button' : 'div'
   return (
-    <div className="tile">
-      <div className="tile-label">{t(kind.key)}</div>
+    <Box className={`tile${onOpen ? ' drill' : ''}${open ? ' open' : ''}`} onClick={onOpen} aria-expanded={onOpen ? !!open : undefined}>
+      <div className="tile-label">
+        {label}
+        {onOpen && <ChevronDownIcon />}
+      </div>
+      {children}
+    </Box>
+  )
+}
+
+function PerfTile(props: { kind: (typeof PERF_TILES)[number]; value: number | null; n: number; waiting: boolean; open?: boolean; onOpen?: () => void }) {
+  const { t, lang } = useUi()
+  const { kind, value, n, waiting, open, onOpen } = props
+  return (
+    <TileBox label={t(kind.key)} open={open} onOpen={onOpen}>
       <div className="tile-value" style={normTone(kind.key, '', value)}>
         {waiting ? <TabSpin on /> : fmt(value, kind.digits, lang)}
         {!waiting && value !== null && <small>{kind.unit}</small>}
       </div>
       {!waiting && <div className="tile-note">{t('samples', { n })}</div>}
-    </div>
+    </TileBox>
   )
 }
 
@@ -2178,21 +2247,20 @@ const SHOT_TILES: { key: 'firstShot' | 'counterStrafe' | 'swings'; note: Key; of
   { key: 'swings', note: 'swingsNote', of: r => [r.swings_good, r.swings] },
 ]
 
-function ShotTile(props: { kind: (typeof SHOT_TILES)[number]; row?: PerfRow; waiting: boolean }) {
+function ShotTile(props: { kind: (typeof SHOT_TILES)[number]; row?: PerfRow; waiting: boolean; open?: boolean; onOpen?: () => void }) {
   const { t, lang } = useUi()
-  const { kind, row, waiting } = props
+  const { kind, row, waiting, open, onOpen } = props
   const [part, n] = row ? kind.of(row).map(v => v ?? 0) : [0, 0]
   const enough = kind.key !== 'counterStrafe' || n >= SHOT_MIN
   const value = n > 0 && enough ? (100 * part) / n : enough ? null : 0
   return (
-    <div className="tile">
-      <div className="tile-label">{t(kind.key)}</div>
+    <TileBox label={t(kind.key)} open={open} onOpen={onOpen}>
       <div className={`tile-value${enough ? '' : ' faint'}`} style={enough ? normTone(kind.key, '%', value) : undefined}>
         {waiting ? <TabSpin on /> : fmt(value, enough ? 1 : 0, lang)}
         {!waiting && value !== null && <small>%</small>}
       </div>
       {!waiting && <div className="tile-note">{enough ? t(kind.note, { n }) : t('notEnoughData', { n })}</div>}
-    </div>
+    </TileBox>
   )
 }
 
@@ -2636,9 +2704,9 @@ function CrosshairCard(props: { p: Player; avatar?: string; map: string; copied:
 
 const fmtNum = (n: number) => (Math.round(n * 10) / 10).toString()
 
-function Tile(props: { measure: Measure; stats: Stats; pool: Stats[] }) {
+function Tile(props: { measure: Measure; stats: Stats; pool: Stats[]; open?: boolean; onOpen?: () => void }) {
   const { t, lang } = useUi()
-  const { measure, stats, pool } = props
+  const { measure, stats, pool, open, onOpen } = props
   const value = measure.of(stats)
   const values = pool.map(measure.of).filter((v): v is number => v !== null)
   const mid = median(values)
@@ -2649,9 +2717,13 @@ function Tile(props: { measure: Measure; stats: Stats; pool: Stats[] }) {
   const peak = hist ? Math.max(...hist.counts) : 1
   const x = (v: number) => (hist ? ((v - hist.lo) / (hist.hi - hist.lo || 1)) * W : 0)
   const label = t(measure.key)
+  const Box = onOpen ? 'button' : 'div'
   return (
-    <div className="tile">
-      <div className="tile-label">{label}</div>
+    <Box className={`tile${onOpen ? ' drill' : ''}${open ? ' open' : ''}`} onClick={onOpen} aria-expanded={onOpen ? !!open : undefined}>
+      <div className="tile-label">
+        {label}
+        {onOpen && <ChevronDownIcon />}
+      </div>
       <div className="tile-value" style={measure.key === 'rating' ? ratingTone(value) : normTone(measure.key, measure.unit, value)}>
         {fmt(value, measure.digits, lang)}
         {value !== null && measure.unit && <small>{measure.unit}</small>}
@@ -2666,7 +2738,7 @@ function Tile(props: { measure: Measure; stats: Stats; pool: Stats[] }) {
           {mid !== null && <line className="mid" x1={x(mid)} x2={x(mid)} y1={0} y2={H} />}
         </svg>
       )}
-    </div>
+    </Box>
   )
 }
 

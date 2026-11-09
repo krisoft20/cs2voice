@@ -97,7 +97,8 @@ namespace stats {
         for (int i = 0; i < stats_t::SLOTS; i++) {
             const round_t& r = s.round[i];
             player_stats_t& ps = s.players[i];
-            ps.lines.push_back(r.in ? round_line_t{true, r.died, r.kills, r.damage, r.side} : round_line_t{});
+            int kast = (r.kill ? 1 : 0) | (r.assist ? 2 : 0) | (r.alive && !r.died ? 4 : 0) | (r.traded ? 8 : 0);
+            ps.lines.push_back(r.in ? round_line_t{true, r.died, r.kills, r.damage, r.side, kast} : round_line_t{});
             if (!r.in)
                 continue;
             ps.rounds++;

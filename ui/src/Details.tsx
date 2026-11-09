@@ -45,7 +45,7 @@ const COLUMNS: Column[] = [
 const GROUPS: Key[] = ['groupFrags', 'groupAim', 'groupOpening', 'groupUtility', 'groupEconomy']
 
 export const ICONS = 'https://cs2voice-maps.example/icons/'
-const FLAGS: [number, string][] = [
+export const FLAGS: [number, string][] = [
   [1, 'hud_deathnotice_icon_headshot'],
   [2, 'hud_deathnotice_penetrate'],
   [4, 'hud_deathnotice_smoke_kill'],
@@ -69,7 +69,7 @@ export function Icon(props: { name: string; ready: boolean; className?: string; 
   return <img className={className} src={`${ICONS}${name}.svg`} alt={alt ?? ''} onError={() => setBad(true)} />
 }
 
-const roundedClock = (secs: number) => {
+export const roundedClock = (secs: number) => {
   const s = Math.max(0, Math.round(secs))
   return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`
 }

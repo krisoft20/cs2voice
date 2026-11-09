@@ -125,6 +125,24 @@ namespace input {
         return false;
     }
 
+    void aim_off(const match_t& m, int slot, const fire_t& f, const pstate_t& s, shot_sample_t& out) {
+        vec3_t eye = {s.pos[0], s.pos[1], s.pos[2] + (s.eye_z > 0 ? s.eye_z : 64.0f)};
+        vec3_t look = geom::forward(f.pitch, f.yaw);
+        for (const player_t& en : m.players) {
+            if (en.slot < 0 || en.slot == slot || slot >= 64)
+                continue;
+            const pstate_t* b = model::at(m, en.slot, f.tick);
+            if (!b || !(b->flags & pf_alive) || b->team < 2 || b->team == s.team || !((b->spotted[slot >> 5] >> (slot & 31)) & 1))
+                continue;
+            vec3_t head = {b->pos[0], b->pos[1], b->pos[2] + (b->eye_z > 0 ? b->eye_z : 64.0f)};
+            float off = (float)geom::angle_between(look, geom::sub(head, eye));
+            if (out.off < 0 || off < out.off) {
+                out.off = off;
+                out.other = en.slot;
+            }
+        }
+    }
+
     shots_t shots(const match_t& m, int slot) {
         shots_t out;
         std::set<int> first_ticks;
@@ -137,14 +155,30 @@ namespace input {
             if (rifle(f.item) && !(s->flags & pf_ducked)) {
                 float top = weapons::max_speed(f.item, (s->flags & pf_scoped) != 0);
                 if (top > 0) {
+                    float speed = (float)std::hypot(s->vel[0], s->vel[1]);
+                    bool ok = speed <= ACCURATE_SPEED * top;
                     out.stops++;
-                    out.stopped += std::hypot(s->vel[0], s->vel[1]) <= ACCURATE_SPEED * top;
+                    out.stopped += ok;
+                    shot_sample_t x;
+                    x.tick = f.tick;
+                    x.good = ok;
+                    x.item = f.item;
+                    x.speed = speed;
+                    x.limit = (float)(ACCURATE_SPEED * top);
+                    out.stop_at.push_back(x);
                 }
             }
-            if (f.recoil < 0.5f && aimed_gun(f.item) && !sniper(f.item) && first_ticks.insert(f.tick).second)
+            if (f.recoil < 0.5f && aimed_gun(f.item) && !sniper(f.item) && first_ticks.insert(f.tick).second) {
                 out.first++;
+                shot_sample_t x;
+                x.tick = f.tick;
+                x.item = f.item;
+                aim_off(m, slot, f, *s, x);
+                out.first_at.push_back(x);
+            }
         }
         std::set<int> hit_ticks;
+        std::map<int, const hurt_t*> hit_of;
         for (const hurt_t& h : m.hurts) {
             if (h.attacker != slot || h.victim < 0 || !first_ticks.count(h.tick))
                 continue;
@@ -153,8 +187,20 @@ namespace input {
                 continue;
             const pstate_t* a = model::at(m, slot, h.tick);
             const pstate_t* v = model::at(m, h.victim, h.tick);
-            if (a && v && a->team != v->team && hit_ticks.insert(h.tick).second)
+            if (a && v && a->team != v->team && hit_ticks.insert(h.tick).second) {
                 out.first_hits++;
+                hit_of[h.tick] = &h;
+            }
+        }
+        for (shot_sample_t& s : out.first_at) {
+            auto it = hit_of.find(s.tick);
+            s.good = it != hit_of.end();
+            if (!s.good)
+                continue;
+            s.other = it->second->victim;
+            s.damage = it->second->damage;
+            s.head = it->second->hitgroup == 1;
+            s.off = -1;
         }
         return out;
     }
@@ -246,6 +292,14 @@ namespace input {
             }
             out.total++;
             out.good += !heard || kill;
+            shot_sample_t x;
+            x.tick = start;
+            x.good = !heard || kill;
+            x.speed = (float)peak;
+            x.heard = heard;
+            x.kill = kill;
+            x.ticks = stop - start;
+            out.at.push_back(x);
         }
         return out;
     }

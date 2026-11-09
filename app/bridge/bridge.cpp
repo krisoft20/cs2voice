@@ -1022,8 +1022,31 @@ namespace bridge {
         return out;
     }
 
+    std::vector<int16_t> wav_samples(const std::string& b64) {
+        DWORD n = 0;
+        if (b64.empty() || !CryptStringToBinaryA(b64.data(), (DWORD)b64.size(), CRYPT_STRING_BASE64, nullptr, &n, nullptr, nullptr) || n < 12)
+            return {};
+        std::string bytes(n, '\0');
+        CryptStringToBinaryA(b64.data(), (DWORD)b64.size(), CRYPT_STRING_BASE64, (BYTE*)bytes.data(), &n, nullptr, nullptr);
+        if (bytes.compare(0, 4, "RIFF") != 0 || bytes.compare(8, 4, "WAVE") != 0)
+            return {};
+        for (size_t at = 12; at + 8 <= n;) {
+            uint32_t len = 0;
+            memcpy(&len, bytes.data() + at + 4, 4);
+            if (bytes.compare(at, 4, "data") == 0) {
+                size_t count = std::min<size_t>(len, n - at - 8) / 2;
+                std::vector<int16_t> out(count);
+                memcpy(out.data(), bytes.data() + at + 8, count * 2);
+                return out;
+            }
+            at += 8 + len + (len & 1);
+        }
+        return {};
+    }
+
     void cmd_clip_make(const json_t& j) {
         exporter::job_t job;
+        job.voice = wav_samples(json::str(json::at(j, "voice")));
         job.id = json::str(json::at(j, "id"));
         job.dir = replays::video_dir(json::str(json::at(j, "video")));
         job.from = json::num(json::at(j, "from"));

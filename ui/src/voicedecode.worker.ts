@@ -149,12 +149,12 @@ const load = async (id: number, indices: number[]) => {
   postMessage({ loaded: id })
 }
 
-onmessage = (e: MessageEvent<{ speakers?: Job[][]; load?: number; indices?: number[] }>) => {
+onmessage = (e: MessageEvent<{ speakers?: Job[][]; envs?: boolean; load?: number; indices?: number[] }>) => {
   const m = e.data
   if (m.speakers) {
     speakers = m.speakers
     speakers.forEach((jobs, s) => jobs.forEach((job, k) => where.set(job.index, [s, k])))
-    envelopes().catch(err => postMessage({ error: String(err) }))
+    if (m.envs !== false) envelopes().catch(err => postMessage({ error: String(err) }))
   } else if (m.load !== undefined) {
     load(m.load, m.indices ?? []).catch(err => postMessage({ error: String(err), loaded: m.load }))
   }

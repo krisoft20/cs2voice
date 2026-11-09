@@ -21,7 +21,7 @@
 
 namespace perfs {
     const char* CACHE_FORMAT = "perfs 1";
-    const int DATA_VERSION = 6;
+    const int DATA_VERSION = 8;
 
     struct entry_t {
         int version = 0;
@@ -243,6 +243,32 @@ namespace perfs {
                    ",\"stopped\":" + std::to_string(sh.stopped);
             swings_t sw = input::swings(*m, pl.slot);
             out += ",\"swings\":" + std::to_string(sw.total) + ",\"swings_good\":" + std::to_string(sw.good);
+            auto samples = [&](const char* name, const std::vector<perf_sample_t>& list) {
+                out += std::string(",\"") + name + "\":[";
+                for (size_t k = 0; k < list.size(); k++) {
+                    char num[32];
+                    snprintf(num, sizeof(num), "%.1f", list[k].value);
+                    out += std::string(k ? "," : "") + "[" + std::to_string(list[k].tick) + "," + std::to_string(list[k].other) + "," + num + "]";
+                }
+                out += "]";
+            };
+            auto marks = [&](const char* name, const std::vector<shot_sample_t>& list) {
+                out += std::string(",\"") + name + "\":[";
+                for (size_t k = 0; k < list.size(); k++) {
+                    const shot_sample_t& x = list[k];
+                    char nums[96];
+                    snprintf(nums, sizeof(nums), "%.0f,%.0f,%d,%d,%.1f,%d,%d", x.speed, x.limit, x.other, x.damage, x.off,
+                             (x.head ? 1 : 0) | (x.heard ? 2 : 0) | (x.kill ? 4 : 0), x.ticks);
+                    out += std::string(k ? "," : "") + "[" + std::to_string(x.tick) + "," + (x.good ? "1" : "0") + "," + std::to_string(x.item) + "," + nums + "]";
+                }
+                out += "]";
+            };
+            samples("ttd_at", pf.ttd_at);
+            samples("reaction_at", pf.reaction_at);
+            samples("placement_at", pf.placement_at);
+            marks("first_at", sh.first_at);
+            marks("stop_at", sh.stop_at);
+            marks("swings_at", sw.at);
             out += "}";
         };
         std::atomic<size_t> next = 0;

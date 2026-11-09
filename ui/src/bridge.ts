@@ -30,7 +30,7 @@ export type Stats = {
   enemy_blinds: number
   enemy_blind_ms: number
   team_blind_ms: number
-  lines: [number, number, number, number, number][]
+  lines: [number, number, number, number, number, number?][]
   eco?: [number, number, number, number, number][]
 }
 
@@ -50,7 +50,15 @@ export type PerfRow = {
   stopped: number
   swings: number
   swings_good: number
+  ttd_at?: [number, number, number][]
+  reaction_at?: [number, number, number][]
+  placement_at?: [number, number, number][]
+  first_at?: MarkRow[]
+  stop_at?: MarkRow[]
+  swings_at?: MarkRow[]
 }
+
+export type MarkRow = [tick: number, good: number, item: number, speed: number, limit: number, other: number, damage: number, off: number, flags: number, ticks: number]
 
 export type SkinItem = {
   weapon: string
@@ -271,7 +279,7 @@ type Outgoing =
   | { type: 'replay_delete'; id: string }
   | { type: 'replay_pin'; id: string }
   | { type: 'replay_keep'; n: number }
-  | { type: 'clip_make'; id: string; video: string; from: number; to: number; name: string; width: number; height: number; fps: number; bitrate: number; max_bytes: number; match: string; map: string; tag: string }
+  | { type: 'clip_make'; id: string; video: string; from: number; to: number; name: string; width: number; height: number; fps: number; bitrate: number; max_bytes: number; match: string; map: string; tag: string; voice?: string }
   | { type: 'clip_cancel'; id: string }
   | { type: 'clip_copy'; paths: string[] }
   | { type: 'clip_show'; path: string }

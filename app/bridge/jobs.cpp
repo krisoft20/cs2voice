@@ -23,7 +23,7 @@ namespace jobs {
     };
 
     const char* CACHE_FORMAT = "cache 5";
-    const int DATA_VERSION = 18;
+    const int DATA_VERSION = 19;
 
     const int MAX_WORKERS = 8;
     const uint64_t GAME_CHECK_MS = 5000;
@@ -95,7 +95,7 @@ namespace jobs {
             for (size_t k = 0; k < st.lines.size(); k++) {
                 const round_line_t& l = st.lines[k];
                 j += std::string(k ? "," : "") + "[" + (l.in ? "1" : "0") + "," + std::to_string(l.kills) + "," + (l.died ? "1" : "0") + "," +
-                     std::to_string(l.damage) + "," + std::to_string(l.side) + "]";
+                     std::to_string(l.damage) + "," + std::to_string(l.side) + "," + std::to_string(l.kast) + "]";
             }
             j += "],\"eco\":[";
             for (size_t k = 0; k < st.eco.size(); k++) {

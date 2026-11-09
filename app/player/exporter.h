@@ -12,6 +12,7 @@ namespace exporter {
         int fps = 60;
         int bitrate = 0;
         uint64_t max_bytes = 0;
+        std::vector<int16_t> voice;
     };
 
     void add(const job_t& job);

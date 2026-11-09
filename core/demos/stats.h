@@ -9,6 +9,7 @@ struct round_line_t {
     int kills = 0;
     int damage = 0;
     int side = 0;
+    int kast = 0;
 };
 
 struct round_eco_t {

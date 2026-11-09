@@ -78,7 +78,7 @@ export const parse = (buf: ArrayBuffer): Voice | null => {
 
 export type Source = { envs: Promise<void>; load: (list: Spurt[]) => Promise<void>; close: () => void }
 
-export const open = (voice: Voice, each: (s: Spurt) => void): Source => {
+export const open = (voice: Voice, each: (s: Spurt) => void, envelopes = true): Source => {
   const worker = new Worker(new URL('./voicedecode.worker.ts', import.meta.url), { type: 'module' })
   const speakers = voice.speakers.map((_, i) => voice.spurts.flatMap((s, index) => (s.speaker === i ? [{ index, frames: s.frames }] : [])))
   const index = new Map(voice.spurts.map((s, i) => [s, i]))
@@ -111,7 +111,7 @@ export const open = (voice: Voice, each: (s: Spurt) => void): Source => {
     }
   }
   worker.onerror = e => envFail(new Error(e.message))
-  worker.postMessage({ speakers })
+  worker.postMessage({ speakers, envs: envelopes })
   const load = (list: Spurt[]) => {
     const fresh: number[] = []
     const wait: Promise<void>[] = []

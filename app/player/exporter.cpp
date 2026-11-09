@@ -22,6 +22,11 @@ namespace exporter {
     const double SIZE_SAFETY = 0.93;
     const DWORD POOL = 8;
     const auto PROGRESS_EVERY = std::chrono::milliseconds(400);
+    const int VOICE_RATE = 48000;
+    const float VOICE_GAIN = 1.0f;
+    const UINT32 AAC_BYTES = 24000;
+    const int PCM_CHUNK = 1024;
+    const DWORD PCM_BUFFER = 16384;
 
     struct sound_t {
         double t = 0;
@@ -180,6 +185,32 @@ namespace exporter {
         return t;
     }
 
+    IMFMediaType* pcm_type(int rate, int channels) {
+        IMFMediaType* t = nullptr;
+        MFCreateMediaType(&t);
+        t->SetGUID(MF_MT_MAJOR_TYPE, MFMediaType_Audio);
+        t->SetGUID(MF_MT_SUBTYPE, MFAudioFormat_PCM);
+        t->SetUINT32(MF_MT_AUDIO_SAMPLES_PER_SECOND, (UINT32)rate);
+        t->SetUINT32(MF_MT_AUDIO_NUM_CHANNELS, (UINT32)channels);
+        t->SetUINT32(MF_MT_AUDIO_BITS_PER_SAMPLE, 16);
+        t->SetUINT32(MF_MT_AUDIO_BLOCK_ALIGNMENT, (UINT32)channels * 2);
+        t->SetUINT32(MF_MT_AUDIO_AVG_BYTES_PER_SECOND, (UINT32)(rate * channels * 2));
+        t->SetUINT32(MF_MT_ALL_SAMPLES_INDEPENDENT, TRUE);
+        return t;
+    }
+
+    IMFMediaType* aac_type(int rate, int channels) {
+        IMFMediaType* t = nullptr;
+        MFCreateMediaType(&t);
+        t->SetGUID(MF_MT_MAJOR_TYPE, MFMediaType_Audio);
+        t->SetGUID(MF_MT_SUBTYPE, MFAudioFormat_AAC);
+        t->SetUINT32(MF_MT_AUDIO_SAMPLES_PER_SECOND, (UINT32)rate);
+        t->SetUINT32(MF_MT_AUDIO_NUM_CHANNELS, (UINT32)channels);
+        t->SetUINT32(MF_MT_AUDIO_BITS_PER_SAMPLE, 16);
+        t->SetUINT32(MF_MT_AUDIO_AVG_BYTES_PER_SECOND, AAC_BYTES);
+        return t;
+    }
+
     void set_rate(IMFSinkWriter* w, DWORD stream, const job_t& job, int bitrate) {
         ICodecAPI* api = nullptr;
         if (FAILED(w->GetServiceForStream(stream, GUID_NULL, IID_PPV_ARGS(&api))))
@@ -198,7 +229,7 @@ namespace exporter {
         api->Release();
     }
 
-    bool open_writer(run_t& r, const job_t& job, const std::wstring& path, const mp4::track_t* sound, int bitrate, std::string& err) {
+    bool open_writer(run_t& r, const job_t& job, const std::wstring& path, const mp4::track_t* sound, int mix_rate, int mix_channels, int bitrate, std::string& err) {
         UINT token = 0;
         IMFAttributes* attrs = nullptr;
         bool ok = SUCCEEDED(MFCreateDXGIDeviceManager(&token, &r.mgr)) && SUCCEEDED(r.mgr->ResetDevice(r.dev, token)) &&
@@ -230,7 +261,15 @@ namespace exporter {
             return false;
         }
         set_rate(r.writer, r.video, job, bitrate);
-        if (sound) {
+        if (mix_rate > 0) {
+            IMFMediaType* a = aac_type(mix_rate, mix_channels);
+            IMFMediaType* p = pcm_type(mix_rate, mix_channels);
+            r.has_audio = SUCCEEDED(r.writer->AddStream(a, &r.audio)) && SUCCEEDED(r.writer->SetInputMediaType(r.audio, p, nullptr));
+            a->Release();
+            p->Release();
+            if (!r.has_audio)
+                dbg::print("[clip] no aac encoder for the mixed sound, the clip has no sound");
+        } else if (sound) {
             IMFMediaType* a = audio_type(*sound);
             r.has_audio = SUCCEEDED(r.writer->AddStream(a, &r.audio)) && SUCCEEDED(r.writer->SetInputMediaType(r.audio, a, nullptr));
             a->Release();
@@ -360,6 +399,138 @@ namespace exporter {
         return out;
     }
 
+    IMFTransform* aac_decoder(const mp4::track_t& track) {
+        MFT_REGISTER_TYPE_INFO in = {MFMediaType_Audio, MFAudioFormat_AAC};
+        IMFActivate** acts = nullptr;
+        UINT32 n = 0;
+        if (FAILED(MFTEnumEx(MFT_CATEGORY_AUDIO_DECODER, MFT_ENUM_FLAG_SYNCMFT | MFT_ENUM_FLAG_LOCALMFT | MFT_ENUM_FLAG_SORTANDFILTER, &in, nullptr, &acts, &n)))
+            return nullptr;
+        IMFTransform* mft = nullptr;
+        if (n)
+            acts[0]->ActivateObject(IID_PPV_ARGS(&mft));
+        for (UINT32 i = 0; i < n; i++)
+            acts[i]->Release();
+        CoTaskMemFree(acts);
+        if (!mft)
+            return nullptr;
+        IMFMediaType* a = audio_type(track);
+        IMFMediaType* p = pcm_type(track.rate, track.channels);
+        bool ok = SUCCEEDED(mft->SetInputType(0, a, 0)) && SUCCEEDED(mft->SetOutputType(0, p, 0));
+        a->Release();
+        p->Release();
+        if (!ok) {
+            mft->Release();
+            return nullptr;
+        }
+        mft->ProcessMessage(MFT_MESSAGE_NOTIFY_BEGIN_STREAMING, 0);
+        return mft;
+    }
+
+    void take_pcm(IMFTransform* mft, const job_t& job, int rate, int channels, std::vector<int16_t>& pcm) {
+        MFT_OUTPUT_STREAM_INFO si = {};
+        mft->GetOutputStreamInfo(0, &si);
+        bool own = !(si.dwFlags & (MFT_OUTPUT_STREAM_PROVIDES_SAMPLES | MFT_OUTPUT_STREAM_CAN_PROVIDE_SAMPLES));
+        while (true) {
+            MFT_OUTPUT_DATA_BUFFER ob = {};
+            if (own) {
+                IMFMediaBuffer* b = nullptr;
+                if (FAILED(MFCreateSample(&ob.pSample)) || FAILED(MFCreateMemoryBuffer(std::max(si.cbSize, PCM_BUFFER), &b)))
+                    break;
+                ob.pSample->AddBuffer(b);
+                b->Release();
+            }
+            DWORD status = 0;
+            HRESULT hr = mft->ProcessOutput(0, 1, &ob, &status);
+            if (ob.pEvents)
+                ob.pEvents->Release();
+            if (FAILED(hr)) {
+                if (ob.pSample)
+                    ob.pSample->Release();
+                break;
+            }
+            LONGLONG time = 0;
+            IMFMediaBuffer* buf = nullptr;
+            BYTE* p = nullptr;
+            DWORD len = 0;
+            if (SUCCEEDED(ob.pSample->GetSampleTime(&time)) && SUCCEEDED(ob.pSample->ConvertToContiguousBuffer(&buf)) && SUCCEEDED(buf->Lock(&p, nullptr, &len))) {
+                int64_t at = std::llround((time / 1e7 - job.from) * rate) * channels;
+                size_t n = len / 2;
+                const int16_t* src = (const int16_t*)p;
+                for (size_t i = 0; i < n; i++)
+                    if (at + (int64_t)i >= 0 && at + (int64_t)i < (int64_t)pcm.size())
+                        pcm[(size_t)(at + i)] = src[i];
+                buf->Unlock();
+            }
+            if (buf)
+                buf->Release();
+            ob.pSample->Release();
+        }
+    }
+
+    bool decode_sound(const job_t& job, const mp4::track_t& track, std::vector<int16_t>& pcm) {
+        IMFTransform* mft = aac_decoder(track);
+        if (!mft)
+            return false;
+        for (const sound_t& s : load_sound(job, track)) {
+            IMFSample* sample = nullptr;
+            IMFMediaBuffer* buf = nullptr;
+            BYTE* p = nullptr;
+            if (FAILED(MFCreateSample(&sample)) || FAILED(MFCreateMemoryBuffer((DWORD)s.data.size(), &buf)) || FAILED(buf->Lock(&p, nullptr, nullptr))) {
+                if (buf)
+                    buf->Release();
+                if (sample)
+                    sample->Release();
+                continue;
+            }
+            memcpy(p, s.data.data(), s.data.size());
+            buf->Unlock();
+            buf->SetCurrentLength((DWORD)s.data.size());
+            sample->AddBuffer(buf);
+            sample->SetSampleTime((LONGLONG)std::llround(s.t * 1e7));
+            sample->SetSampleDuration((LONGLONG)std::llround(s.dur * 1e7));
+            if (mft->ProcessInput(0, sample, 0) == MF_E_NOTACCEPTING) {
+                take_pcm(mft, job, track.rate, track.channels, pcm);
+                mft->ProcessInput(0, sample, 0);
+            }
+            take_pcm(mft, job, track.rate, track.channels, pcm);
+            buf->Release();
+            sample->Release();
+        }
+        mft->ProcessMessage(MFT_MESSAGE_NOTIFY_END_OF_STREAM, 0);
+        mft->ProcessMessage(MFT_MESSAGE_COMMAND_DRAIN, 0);
+        take_pcm(mft, job, track.rate, track.channels, pcm);
+        mft->Release();
+        return true;
+    }
+
+    std::vector<sound_t> mixed_sound(const job_t& job, const mp4::track_t* track, int rate, int channels) {
+        size_t frames = (size_t)std::max<int64_t>(0, std::llround((job.to - job.from) * rate));
+        std::vector<int16_t> pcm(frames * channels, 0);
+        if (track && !decode_sound(job, *track, pcm))
+            dbg::print("[clip] cant decode the recording sound, the clip gets the voice only");
+        for (size_t i = 0; i < frames; i++) {
+            size_t j = (size_t)((double)i * VOICE_RATE / rate);
+            if (j >= job.voice.size())
+                break;
+            float v = job.voice[j] * VOICE_GAIN;
+            for (int c = 0; c < channels; c++) {
+                int16_t& x = pcm[i * channels + c];
+                x = (int16_t)std::clamp((int)std::lround(x + v), -32768, 32767);
+            }
+        }
+        std::vector<sound_t> out;
+        for (size_t i = 0; i < frames; i += PCM_CHUNK) {
+            size_t n = std::min<size_t>(PCM_CHUNK, frames - i);
+            sound_t s;
+            s.t = job.from + (double)i / rate;
+            s.dur = (double)n / rate;
+            const uint8_t* p = (const uint8_t*)(pcm.data() + i * channels);
+            s.data.assign(p, p + n * channels * 2);
+            out.push_back(std::move(s));
+        }
+        return out;
+    }
+
     bool encode(const job_t& job, const std::wstring& path, int bitrate, std::string& err) {
         mp4::track_t vtrack, atrack;
         std::vector<uint8_t> init;
@@ -368,12 +539,15 @@ namespace exporter {
             return false;
         }
         bool sound = read_file(job.dir + L"\\init-stream1.m4s", init) && mp4::init(init.data(), init.size(), atrack) && atrack.timescale && atrack.rate > 0;
+        bool mix = !job.voice.empty();
+        int rate = sound ? atrack.rate : VOICE_RATE;
+        int channels = sound ? atrack.channels : 1;
         run_t r;
-        if (!open_gpu(r, vtrack, job, err) || !open_writer(r, job, path, sound ? &atrack : nullptr, bitrate, err)) {
+        if (!open_gpu(r, vtrack, job, err) || !open_writer(r, job, path, sound ? &atrack : nullptr, mix ? rate : 0, channels, bitrate, err)) {
             release(r);
             return false;
         }
-        std::vector<sound_t> audio = r.has_audio ? load_sound(job, atrack) : std::vector<sound_t>{};
+        std::vector<sound_t> audio = !r.has_audio ? std::vector<sound_t>{} : mix ? mixed_sound(job, sound ? &atrack : nullptr, rate, channels) : load_sound(job, atrack);
         size_t next_sound = 0;
         std::vector<chunk_t> list = chunks::scan(job.dir, 0);
         std::vector<uint8_t> data;

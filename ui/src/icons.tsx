@@ -115,6 +115,7 @@ export const Speaker = (props: { on: boolean }) => (
 export const PauseIcon = tabler(["M6 5m0 1a1 1 0 0 1 1 -1h2a1 1 0 0 1 1 1v12a1 1 0 0 1 -1 1h-2a1 1 0 0 1 -1 -1z", "M14 5m0 1a1 1 0 0 1 1 -1h2a1 1 0 0 1 1 1v12a1 1 0 0 1 -1 1h-2a1 1 0 0 1 -1 -1z"])
 
 export const SkipBackIcon = tabler(["M20 5v14l-12 -7z", "M4 5l0 14"])
+export const RestartIcon = tabler(["M4.05 11a8 8 0 1 1 .5 4m-.5 5v-5h5"])
 
 export const SkipForwardIcon = tabler(["M4 5v14l12 -7z", "M20 5l0 14"])
 

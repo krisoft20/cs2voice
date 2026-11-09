@@ -19,6 +19,12 @@ enum perf_stat_t {
     ps_count,
 };
 
+struct perf_sample_t {
+    int tick = 0;
+    int other = -1;
+    double value = 0;
+};
+
 struct perf_t {
     int rounds = 0;
     int kast_rounds = 0;
@@ -31,6 +37,9 @@ struct perf_t {
     std::vector<double> ttd_ms;
     std::vector<double> reaction_ms;
     std::vector<double> placement_deg;
+    std::vector<perf_sample_t> ttd_at;
+    std::vector<perf_sample_t> reaction_at;
+    std::vector<perf_sample_t> placement_at;
     double value[ps_count] = {};
     bool has[ps_count] = {};
 };
