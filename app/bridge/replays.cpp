@@ -116,6 +116,10 @@ namespace replays {
         bool saved = false;
         bool done = false;
         bool autosave = false;
+        double start = 0;
+        double origin = 0;
+        bool video = false;
+        std::shared_ptr<const std::vector<rec_event_t>> timeline;
     };
 
     struct plan_t {
@@ -273,6 +277,44 @@ namespace replays {
         return std::max(0.0, c.origin + end - c.start);
     }
 
+    std::string events_json(const std::vector<rec_event_t>& events, double start, double duration) {
+        std::string out = ",\"events\":[";
+        bool first = true;
+        for (const rec_event_t& e : events) {
+            if (e.t < start - 2 || e.t > start + duration + 2)
+                continue;
+            out += std::string(first ? "" : ",") + "[" + num(e.t - start) + ",\"" + json::escape(e.kind) + "\",\"" + json::escape(e.icon) + "\",\"" +
+                   json::escape(e.title) + "\",\"" + json::escape(e.text) + "\"]";
+            first = false;
+        }
+        return out + "]";
+    }
+
+    void fill_events(row_t& r, const json_t& j, const row_t& live) {
+        if (!live.timeline)
+            return;
+        double start = live.video ? live.origin + json::num(json::at(j, "at")) : live.start + (double)(r.unix - live.unix);
+        if (std::abs(start - live.start) > LIVE_DONE_GAP)
+            return;
+        std::string events = events_json(*live.timeline, start, json::num(json::at(j, "duration")));
+        size_t pos = r.json.rfind(",\"events\":[");
+        if (events == ",\"events\":[]" || pos == std::string::npos || r.json.compare(r.json.size() - 2, 2, "]}") != 0 ||
+            r.json.compare(pos, std::string::npos, events + "}") == 0)
+            return;
+        r.json = r.json.substr(0, pos) + events + "}";
+        std::wstring path = r.dir + L"\\match.json";
+        std::wstring part = path + L".part";
+        FILE* f = _wfopen(part.c_str(), L"wb");
+        if (!f)
+            return;
+        bool ok = fwrite(r.json.data(), 1, r.json.size(), f) == r.json.size();
+        fclose(f);
+        if (ok && MoveFileExW(part.c_str(), path.c_str(), MOVEFILE_REPLACE_EXISTING))
+            dbg::print("[replays] %s: events filled from the steam timeline", r.id.c_str());
+        else
+            DeleteFileW(part.c_str());
+    }
+
     void add_saved(std::map<std::string, row_t>& rows) {
         WIN32_FIND_DATAW fd;
         HANDLE h = FindFirstFileW((g_saved + L"\\*").c_str(), &fd);
@@ -296,6 +338,8 @@ namespace replays {
             r.saved = true;
             const json_t* a = json::at(j, "auto");
             r.autosave = a && a->kind == jk_bool && a->b;
+            if (auto it = rows.find(id); it != rows.end())
+                fill_events(r, j, it->second);
             rows[id] = r;
         } while (FindNextFileW(h, &fd));
         FindClose(h);
@@ -442,6 +486,7 @@ namespace replays {
                 events = t.marks;
             std::vector<rec_match_t> matches = t.matches;
             recordings::extend(matches, events);
+            auto timeline = live ? nullptr : std::make_shared<const std::vector<rec_event_t>>(events);
             std::vector<rec_video_t> videos = t.videos;
             for (rec_video_t& c : videos)
                 if (c.duration <= 0)
@@ -471,17 +516,12 @@ namespace replays {
                     r.dir = root + L"\\video\\" + text::wide(v->folder);
                     r.at = m.start - v->origin;
                     r.done = !live || i + 1 < matches.size() || v->start + v->duration > m.start + m.duration + LIVE_DONE_GAP;
+                    r.origin = v->origin;
+                    r.video = true;
                 }
-                r.events = ",\"events\":[";
-                bool first = true;
-                for (const rec_event_t& e : events) {
-                    if (e.t < m.start - 2 || e.t > m.start + m.duration + 2)
-                        continue;
-                    r.events += std::string(first ? "" : ",") + "[" + num(e.t - m.start) + ",\"" + json::escape(e.kind) + "\",\"" + json::escape(e.icon) +
-                                "\",\"" + json::escape(e.title) + "\",\"" + json::escape(e.text) + "\"]";
-                    first = false;
-                }
-                r.events += "]";
+                r.start = m.start;
+                r.timeline = timeline;
+                r.events = events_json(events, m.start, m.duration);
                 r.json = "{" + r.meta + video + (live ? ",\"live\":true" : "") + (r.done ? ",\"done\":true" : "") + r.events + "}";
                 rows[id] = r;
             }
