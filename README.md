@@ -1,8 +1,8 @@
 # cs2voice
 
-A Windows app for CS2 voice chat in demos. It finds the Counter-Strike 2 demos on your PC, plays each player's voice chat, and shows the match: stats, rounds, a 2D radar replay, Steam recordings, clips, crosshairs and skins.
+A Windows app for CS2 demos. Play each player's voice chat, go through the match, and follow your own stats from one demo to the next.
 
-Website: https://krisoft20.github.io/cs2voice/
+Website: https://krisoft20.github.io/cs2voice/ · Discord: https://discord.gg/4vsvva5GHM
 
 ## Download
 
@@ -26,25 +26,19 @@ cs2voice.com is a different, paid web service and has nothing to do with this ap
 
 ## Demos
 
-Finds demos in the CS2 replays folder, Downloads and folders you add, `.dem` and `.dem.zst`, FACEIT and matchmaking. Cleanup moves old and duplicate demos to the Recycle Bin.
+Finds `.dem` and `.dem.zst` files from FACEIT and matchmaking in the CS2 replays folder, Downloads and any folder you add.
 
 ### Overview
 
-Both teams, match awards, and "Watch in game", which copies the console command that plays the demo with only the voices you picked.
+Both teams with ratings, match awards, and "Watch in game", which copies the console command that plays the demo with only the voices you picked.
 
 ![Overview](docs/overview.png)
 
 ### Players
 
-Every stat drawn against how players usually score.
+Every stat drawn against how players usually score. Click one to see the moments behind it.
 
 ![Players](docs/players.png)
-
-### Details
-
-How each round ended, the kill feed, gear and damage.
-
-![Details](docs/details.png)
 
 ### Voices
 
@@ -52,35 +46,25 @@ Every player's voice, round by round, next to the kills. Play everyone, one team
 
 ![Voices](docs/voices.png)
 
-### Radar
-
-2D replay with grenades, smokes, fires and the bomb. Click a grenade to copy a `setpos` line to where it was thrown from.
-
-![Radar](docs/radar.png)
-
-### Crosshairs
-
-Every player's crosshair at game size, with a copy button for the share code.
-
-![Crosshairs](docs/crosshairs.png)
-
-### Skins
-
-Every player's skins with wear, float, StatTrak and stickers.
-
-![Skins](docs/skins.png)
+The match view also has Details (rounds, kill feed, damage), a 2D Radar replay, Crosshairs and Skins.
 
 ## Replays
 
-Steam's background recording of your match, lined up with the demo's rounds and kills. Keep a copy before Steam records over it.
+Steam's background recording of your match, lined up with the demo's rounds and kills.
 
 ![Replays](docs/replays.png)
 
+## Track
+
+Your own numbers across every demo: rating, win rate, T and CT side, maps, clutches, weapons and FACEIT ELO.
+
+![Track](docs/track.png)
+
 ## Clips
 
-Cut a moment into an MP4 sized for Discord (20, 50 or 500 MB) and paste it straight in.
+Cut a moment into an MP4 small enough for Discord.
 
-![Clips](docs/clip.png)
+![Clips](docs/clips.png)
 
 ## Privacy
 
@@ -88,9 +72,12 @@ Everything is read from the demo files on your PC. Nothing is uploaded. cs2voice
 
 - check GitHub for a new version (can be turned off)
 - read the public Steam profiles of the players in your demos, for avatars and account age
+- read FACEIT for the level and ELO of players in your FACEIT demos, and for your own ELO history (the same switch in Settings turns off both this and the Steam lookups)
 - download the WebView2 Runtime, if it is missing and you agree
 
 Its own data (caches, settings, log) is in `%LOCALAPPDATA%\cs2voice`.
+
+One file, `gamestate_integration_cs2voice.cfg`, is added to the CS2 `cfg` folder. With it CS2 sends the state of your match to the app on your own PC (127.0.0.1), so background work can pause while you play. This is Valve's game state integration. Nothing leaves your computer.
 
 ## Building
 
