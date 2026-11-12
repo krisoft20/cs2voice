@@ -5,6 +5,7 @@ namespace replays {
     void cleanup();
     void list();
     void refresh();
+    void nudge();
     void save(const std::string& id, const std::vector<int>& keep, const std::vector<std::pair<double, double>>& cuts);
     void table(const std::string& id);
     void remove(const std::string& id, bool user);

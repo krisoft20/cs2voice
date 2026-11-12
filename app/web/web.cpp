@@ -455,7 +455,7 @@ namespace web {
                                     if (FAILED(hr) || !result || !json::parse(text::utf8(result), v, err))
                                         return S_OK;
                                     std::string body = json::str(&v);
-                                    if (g_fetching && !body.empty() && body[0] == '{')
+                                    if (g_fetching && !body.empty() && (body[0] == '{' || body[0] == '['))
                                         fetch_done(true, body);
                                     return S_OK;
                                 }).Get());

@@ -25,12 +25,14 @@ export type Stats = {
   utility_damage: number
   enemies_flashed: number
   flash_assists: number
+  eco_kills?: number
+  eco_deaths?: number
   ping?: number
   flashes: number
   enemy_blinds: number
   enemy_blind_ms: number
   team_blind_ms: number
-  lines: [number, number, number, number, number, number?][]
+  lines: [number, number, number, number, number, number?, number?][]
   eco?: [number, number, number, number, number][]
 }
 
@@ -89,6 +91,7 @@ export type Profile = { avatar: string; vac: boolean; limited: boolean; hidden: 
 
 export type Player = { slot: number; name: string; crosshair?: string; steamid: string; team: number; voice: number; mute?: number; color?: number; stats?: Stats; demoName?: string; level?: number; elo?: number; rank?: number }
 
+export type EloHistory = { elo: number; items: [number, number, number, string, string, number, number, number][] }
 export type FaceitPlayer = { steamid: string; nick: string; level: number; elo: number; rank: number }
 
 export type Roster = {
@@ -117,8 +120,23 @@ export type RoundInfo = {
   start: number
   decided: number
   reason: number
-  kills: [number, number, number, number, number, string][]
+  kills: [number, number, number, number, number, string, number?][]
   bomb: [number, number, number][]
+}
+
+export type TrackStats = Omit<Stats, 'lines' | 'eco'> & { swing?: number; ct_rounds?: number }
+export type TrackMatch = {
+  v: number
+  key: string
+  date: number
+  path: string
+  map: string
+  server: string
+  duration: number
+  rounds: number
+  winners: string
+  score: [number, number]
+  players: { steamid: string; name: string; team: number; stats: TrackStats; cl?: [number, number, number, number][]; wp?: Record<string, number> }[]
 }
 
 export type HistoryMatch = { key: string; date: number; path: string; map: string; score: [number, number]; players: [string, string, number, number, number, number][] }
@@ -161,6 +179,8 @@ export type ReplayMatch = {
   saved?: boolean
   auto?: boolean
   live?: boolean
+  now?: boolean
+  rounds?: [n: number, side: number, winner: number, reason: number, kills: number, hs: number, dmg: number, money: number, equip: number][]
   done?: boolean
   bytes?: number
   cuts?: [number, number][]
@@ -204,6 +224,8 @@ export type Incoming =
   | { type: 'me'; steamid: string }
   | { type: 'history'; matches: HistoryMatch[] }
   | { type: 'history_add'; match: HistoryMatch }
+  | { type: 'matches'; matches: TrackMatch[] }
+  | { type: 'matches_add'; match: TrackMatch }
   | { type: 'art'; map: string }
   | { type: 'settings'; version: string; lang: string; loader?: string; updates: boolean; close?: string; steam?: boolean; talk?: boolean; talkStyle?: number; talkLead?: number; talkMin?: number; talkRefresh?: number; setup?: SetupInfo; cleanup?: CleanupCfg }
   | { type: 'close_ask' }
@@ -225,6 +247,7 @@ export type Incoming =
   | { type: 'watch'; state: 'unpacking' | 'copied' | 'error'; err?: string; line?: string }
   | { type: 'fixed'; path: string; ok: boolean; err: string }
   | { type: 'faceit'; path: string; players: FaceitPlayer[] }
+  | ({ type: 'faceit_history'; steamid: string } & EloHistory)
   | { type: 'replays'; folder: string; background: number; keep: number; rate?: number; buffer?: number; length?: number; free?: number; saved_dir?: string; matches: ReplayMatch[] }
   | { type: 'replay_saving'; id: string; done: number; total: number }
   | { type: 'replay_saved'; id: string; ok: boolean }
@@ -273,6 +296,7 @@ type Outgoing =
   | { type: 'set'; key: string; value: string }
   | { type: 'fix_demo'; path: string }
   | { type: 'faceit'; path: string }
+  | { type: 'faceit_history'; steamid: string }
   | { type: 'replays' }
   | { type: 'replay_save'; id: string; keep: number[]; cuts: [number, number][] }
   | { type: 'replay_chunks'; id: string }

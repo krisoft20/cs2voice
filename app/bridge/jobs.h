@@ -7,6 +7,7 @@
 namespace jobs {
     bool init(const std::wstring& cache_path);
     void seed_history();
+    void seed_matches();
     void cleanup();
     void clear();
     void forget(const std::vector<std::string>& paths);

@@ -1,5 +1,6 @@
 import { createContext, useContext, useState } from 'react'
 import { translator, type Lang, type T } from './i18n'
+import { ratingTier } from './stats'
 
 export type Loader = 'plant' | 'radar' | 'rounds' | 'ammo'
 
@@ -37,4 +38,16 @@ export function Avatar(props: { url?: string; name: string; color?: number }) {
   const style = colorStyle(props.color)
   if (props.url && broken !== props.url) return <img className={`avatar${pc}`} style={style} src={props.url} alt="" onError={() => setBroken(props.url ?? '')} />
   return <span className={`avatar none${pc}`} style={style}>{(props.name || '?').slice(0, 1).toUpperCase()}</span>
+}
+
+export function RatingChip(props: { value: number | null }) {
+  const { lang } = useUi()
+  const v = props.value
+  if (v === null) return <span className="rchip">–</span>
+  return (
+    <span className={`rchip ${ratingTier(v)}`}>
+      {new Intl.NumberFormat(lang, { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(v)}
+      <i style={{ width: `${Math.max(8, Math.min(100, v * 50))}%` }} />
+    </span>
+  )
 }

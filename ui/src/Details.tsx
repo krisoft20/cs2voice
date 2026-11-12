@@ -1,15 +1,16 @@
 import { useEffect, useMemo, useState } from 'react'
 import type { Player, Roster, Stats } from './bridge'
-import { Avatar, remember, remembered, useUi } from './common'
+import { Avatar, remember, remembered, useUi, RatingChip } from './common'
 import type { Key } from './i18n'
-import { pct, per, rating } from './stats'
+import { impact, pct, per, rating, ratingTier, roundSwing, roundTier, swingTier } from './stats'
 import { TeamCompare, sideOf, winnerTeam } from './Summary'
 import { teamLabels } from './voice'
 
-type Column = { key: string; label: Key; group: Key; value: (s: Stats) => number | null; show: (s: Stats) => string; low?: boolean }
+type Column = { key: string; label: Key; group: Key; value: (s: Stats) => number | null; show: (s: Stats) => string; low?: boolean; tier?: (v: number | null) => string; chip?: boolean }
 
 const num = (v: number | null, digits = 0) => (v === null ? '–' : v.toFixed(digits))
 const money = (v: number) => `$${Math.round(v).toLocaleString('en-US')}`
+const signed = (v: number | null, digits = 1) => (v === null ? '–' : `${v > 0 ? '+' : ''}${v.toFixed(digits)}`)
 const ecoSum = (s: Stats, k: number) => (s.eco ?? []).reduce((n, e) => n + e[k], 0)
 
 const COLUMNS: Column[] = [
@@ -17,7 +18,9 @@ const COLUMNS: Column[] = [
   { key: 'd', label: 'colDeaths', group: 'groupFrags', value: s => s.deaths, show: s => `${s.deaths}`, low: true },
   { key: 'a', label: 'colAssists', group: 'groupFrags', value: s => s.assists, show: s => `${s.assists}` },
   { key: 'diff', label: 'colDiff', group: 'groupFrags', value: s => s.kills - s.deaths, show: s => `${s.kills - s.deaths > 0 ? '+' : ''}${s.kills - s.deaths}` },
-  { key: 'rating', label: 'colRating', group: 'groupFrags', value: rating, show: s => num(rating(s), 2) },
+  { key: 'rating', label: 'colRating', group: 'groupFrags', value: rating, show: s => num(rating(s), 2), chip: true },
+  { key: 'impact', label: 'colImpact', group: 'groupFrags', value: impact, show: s => num(impact(s), 2), tier: ratingTier },
+  { key: 'swing', label: 'colSwing', group: 'groupFrags', value: roundSwing, show: s => signed(roundSwing(s), 2), tier: swingTier },
   { key: 'adr', label: 'colAdr', group: 'groupFrags', value: s => per(s.damage, s.rounds), show: s => num(per(s.damage, s.rounds), 1) },
   { key: 'kast', label: 'colKast', group: 'groupFrags', value: s => pct(s.kast, s.rounds), show: s => num(pct(s.kast, s.rounds), 0) },
   { key: 'hs', label: 'colHs', group: 'groupAim', value: s => pct(s.hs_kills, s.kills), show: s => num(pct(s.hs_kills, s.kills), 0) },
@@ -120,7 +123,7 @@ export function Strip(props: { roster: Roster; labels: string[]; pick: number | 
   )
 }
 
-type Event = { tick: number; kind: 'kill'; k: [number, number, number, number, number, string] } | { tick: number; kind: 'bomb'; b: [number, number, number] }
+type Event = { tick: number; kind: 'kill'; k: [number, number, number, number, number, string, number?] } | { tick: number; kind: 'bomb'; b: [number, number, number] }
 
 function RoundView(props: { roster: Roster; labels: string[]; avatars: Record<string, string>; round: number; icons: boolean; from: number }) {
   const { t } = useUi()
@@ -202,6 +205,7 @@ function RoundView(props: { roster: Roster; labels: string[]; avatars: Record<st
                 <span className="dt-tags">
                   {e.k[4] & 64 ? <em className="open">{t('tagOpening')}</em> : null}
                   {e.k[4] & 128 ? <em>{t('tagTrade')}</em> : null}
+                  {e.k[6] ? <b className={`dt-sw ${roundTier(e.k[6] / 100)}`}>{signed(e.k[6] / 100, 0)}%</b> : null}
                 </span>
               </div>
             ) : (
@@ -228,6 +232,7 @@ function RoundView(props: { roster: Roster; labels: string[]; avatars: Record<st
           <span>{t('roundN', { n: round + 1 })}</span>
           <span>{t('colGear')}</span>
           <span>{t('colDmg')}</span>
+          <span>{t('colSwing')}</span>
           <span>{t('colKills')}</span>
         </div>
         {[0, 1].map(team => (
@@ -243,6 +248,7 @@ function RoundView(props: { roster: Roster; labels: string[]; avatars: Record<st
                   </span>
                   <span className="dt-money">{e ? money(e[0]) : '–'}</span>
                   <span>{l[3]}</span>
+                  <span className={`dt-sw ${roundTier(l[6] === undefined ? null : l[6] / 100)}`}>{l[6] === undefined ? '–' : `${signed(l[6] / 100, 0)}%`}</span>
                   <span className="dt-ks">
                     {Array.from({ length: Math.min(l[1], 5) }, (_, k) => (
                       <Icon key={k} name="icons_ui_kill" ready={icons} />
@@ -323,8 +329,8 @@ function MatchView(props: { roster: Roster; avatars: Record<string, string> }) {
                   const v = c.value(p.stats!)
                   const top = v !== null && players.length > 1 && v === best(c) && (c.low || v > 0)
                   return (
-                    <td key={c.key} className={top ? 'top' : ''}>
-                      {c.show(p.stats!)}
+                    <td key={c.key} className={c.chip ? '' : `${top ? 'top' : ''} ${c.tier ? c.tier(v) : ''}`}>
+                      {c.chip ? <RatingChip value={v} /> : c.show(p.stats!)}
                     </td>
                   )
                 })}

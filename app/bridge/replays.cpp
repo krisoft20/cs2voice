@@ -1,5 +1,6 @@
 #include "pch.h"
 
+#include "bridge/gsi.h"
 #include "bridge/replays.h"
 #include "dbg.h"
 #include "demos/finder.h"
@@ -23,6 +24,11 @@ namespace replays {
     const int AUTO_EVERY = 120;
     const double LIVE_DONE_GAP = 60;
     const double AUTO_MIN_LENGTH = 300;
+    const double NOW_MIN = 120;
+    const int NUDGE_AGAIN = 20;
+    const double GSI_SLACK = 30;
+    const double GSI_BEFORE = 300;
+    const double GSI_LEAD = 5;
 
     std::wstring g_root;
 
@@ -147,6 +153,7 @@ namespace replays {
     std::mutex g_list_mu;
     std::thread g_ticker;
     std::condition_variable g_tick_cv;
+    std::atomic<bool> g_nudge = false;
     std::set<std::string> g_skip;
     std::mutex g_skip_mu;
 
@@ -317,6 +324,78 @@ namespace replays {
             DeleteFileW(part.c_str());
     }
 
+    std::string with_gsi(const gsi::match_t& g, const rec_timeline_t& t, std::vector<rec_event_t>& all) {
+        for (const gsi::mark_t& m : g.marks) {
+            rec_event_t e;
+            e.t = m.at - (double)t.unix;
+            e.kind = "event";
+            e.icon = m.icon;
+            e.title = m.title;
+            all.push_back(e);
+        }
+        std::stable_sort(all.begin(), all.end(), [](const rec_event_t& a, const rec_event_t& b) { return a.t < b.t; });
+        if (g.rounds.empty())
+            return {};
+        std::string out = ",\"rounds\":[";
+        for (size_t k = 0; k < g.rounds.size(); k++) {
+            const gsi::round_t& x = g.rounds[k];
+            out += std::string(k ? "," : "") + "[" + std::to_string(x.n) + "," + std::to_string(x.side) + "," + std::to_string(x.winner) + "," + std::to_string(x.reason) + "," +
+                   std::to_string(x.kills) + "," + std::to_string(x.hs) + "," + std::to_string(x.dmg) + "," + std::to_string(x.money) + "," + std::to_string(x.equip) + "]";
+        }
+        return out + "]";
+    }
+
+    void add_now(std::map<std::string, row_t>& rows, const rec_timeline_t& t, const std::vector<rec_match_t>& matches, const std::vector<rec_video_t>& videos,
+                 const std::vector<rec_event_t>& events, std::map<std::string, std::string>& codecs, const std::wstring& root) {
+        const rec_video_t* v = nullptr;
+        for (const rec_video_t& c : videos)
+            if (exists(root + L"\\video\\" + text::wide(c.folder)) && (!v || c.start + c.duration > v->start + v->duration))
+                v = &c;
+        if (!v)
+            return;
+        double start = v->start;
+        for (const rec_match_t& m : matches)
+            start = std::max(start, m.start + m.duration);
+        double end = v->start + v->duration;
+        if (end - start < NOW_MIN)
+            return;
+        gsi::match_t g;
+        bool known = gsi::match(g) && g.start - (double)t.unix > start - GSI_SLACK;
+        if (gsi::alive() && !(known && g.on))
+            return;
+        std::vector<rec_event_t> all = events;
+        std::string map, mode, kda, score, rounds;
+        if (known) {
+            if (g.whole)
+                start = std::max(start, std::min(g.start - (double)t.unix - GSI_LEAD, end - NOW_MIN));
+            map = g.map;
+            mode = g.mode;
+            if (g.kills >= 0)
+                kda = std::to_string(g.kills) + "/" + std::to_string(g.deaths) + "/" + std::to_string(g.assists);
+            if (g.ours >= 0)
+                score = std::to_string(g.ours) + " : " + std::to_string(g.theirs);
+            rounds = with_gsi(g, t, all);
+        }
+        auto it = codecs.find(v->folder);
+        if (it == codecs.end())
+            it = codecs.emplace(v->folder, codec_of(root + L"\\video\\" + text::wide(v->folder))).first;
+        row_t r;
+        r.id = t.name + "#now";
+        r.unix = t.unix + (int64_t)start;
+        r.length = end - start;
+        r.meta = "\"id\":\"" + json::escape(r.id) + "\",\"mode\":\"" + json::escape(mode) + "\",\"map\":\"" + json::escape(map) + "\",\"kda\":\"" + json::escape(kda) +
+                 "\",\"score\":\"" + json::escape(score) + "\",\"unix\":" + std::to_string(r.unix) + ",\"duration\":" + num(r.length) + ",\"now\":true";
+        r.dir = root + L"\\video\\" + text::wide(v->folder);
+        r.at = start - v->origin;
+        r.origin = v->origin;
+        r.video = true;
+        r.start = start;
+        r.events = rounds + events_json(all, start, r.length);
+        r.json = "{" + r.meta + ",\"video\":\"" + json::escape(v->folder) + "\",\"codec\":\"" + it->second + "\",\"at\":" + num(r.at) + ",\"from\":" +
+                 num(v->start - v->origin) + ",\"to\":" + num(end - v->origin) + ",\"live\":true" + r.events + "}";
+        rows[r.id] = r;
+    }
+
     void add_saved(std::map<std::string, row_t>& rows) {
         WIN32_FIND_DATAW fd;
         HANDLE h = FindFirstFileW((g_saved + L"\\*").c_str(), &fd);
@@ -458,13 +537,20 @@ namespace replays {
         while (true) {
             {
                 std::unique_lock<std::mutex> lock(g_list_mu);
-                if (g_tick_cv.wait_for(lock, std::chrono::seconds(wait), [] { return g_quit.load(); }))
+                g_tick_cv.wait_for(lock, std::chrono::seconds(wait), [] { return g_quit.load() || g_nudge.load(); });
+                if (g_quit)
                     return;
             }
-            wait = AUTO_EVERY;
-            if (g_auto > 0)
+            bool nudged = g_nudge.exchange(false);
+            wait = nudged ? NUDGE_AGAIN : AUTO_EVERY;
+            if (g_auto > 0 || nudged)
                 refresh();
         }
+    }
+
+    void nudge() {
+        g_nudge = true;
+        g_tick_cv.notify_all();
     }
 
     void list() {
@@ -526,10 +612,19 @@ namespace replays {
                 }
                 r.start = m.start;
                 r.timeline = timeline;
-                r.events = events_json(events, m.start, m.duration);
+                gsi::match_t g;
+                double rel = 0;
+                if (live && gsi::match(g) && (rel = g.start - (double)t.unix) > m.start - GSI_BEFORE && rel < m.start + m.duration && g.map == m.map) {
+                    std::vector<rec_event_t> all = events;
+                    r.events = with_gsi(g, t, all) + events_json(all, m.start, m.duration);
+                } else {
+                    r.events = events_json(events, m.start, m.duration);
+                }
                 r.json = "{" + r.meta + video + (live ? ",\"live\":true" : "") + (r.done ? ",\"done\":true" : "") + r.events + "}";
                 rows[id] = r;
             }
+            if (live)
+                add_now(rows, t, matches, videos, events, codecs, root);
         }
         add_saved(rows);
         std::vector<const row_t*> order;
@@ -562,7 +657,7 @@ namespace replays {
         }
         if (!stale.empty())
             remove(stale, false);
-        else if (!fresh.empty())
+        else if (!fresh.empty() && !gsi::playing())
             autosave(fresh);
     }
 

@@ -67,7 +67,11 @@ static void row(const result_t& r, double bytes) {
     printf("  %-22s %9.1f ms  %7.1f MB/s\n", r.name.c_str(), r.ms, r.ms > 0 ? mb / (r.ms / 1000.0) : 0);
 }
 
+int swing_fit(const char* list, const char* out);
+
 int main(int argc, char** argv) {
+    if (argc == 4 && !strcmp(argv[1], "swing"))
+        return swing_fit(argv[2], argv[3]);
     if (argc < 2) {
         printf("usage: bench <demo> [runs]\n");
         return 2;

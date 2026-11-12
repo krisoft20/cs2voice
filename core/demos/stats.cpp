@@ -1,11 +1,15 @@
 #include "pch.h"
 
 #include "demos/stats.h"
+#include "demos/swing.h"
 
 namespace stats {
     const float TRADE_SECONDS = 5.f;
     const float FLASHED_SECONDS = 1.f;
     const int HEAD = 1;
+    const double ECO_BASE = 1000;
+    const double ECO_LOW = 0.6;
+    const double ECO_HIGH = 1.4;
 
     int pawn_of(const game_event_t& e, const char* key) {
         return (int)((uint32_t)game_events::num(e, key, -1) & 0x3fff);
@@ -87,6 +91,46 @@ namespace stats {
         return !weapon.empty();
     }
 
+    int weapon_class(const std::string& w) {
+        static const char* NAMES[7][11] = {
+            {"ak47", "m4a1", "m4a1_silencer", "famas", "galilar", "aug", "sg556"},
+            {"awp", "ssg08", "scar20", "g3sg1"},
+            {"mac10", "mp9", "mp7", "mp5sd", "ump45", "p90", "bizon"},
+            {"glock", "hkp2000", "usp_silencer", "p250", "elite", "fiveseven", "tec9", "cz75a", "deagle", "revolver"},
+            {"nova", "xm1014", "sawedoff", "mag7", "m249", "negev"},
+            {},
+            {"taser"},
+        };
+        if (w.find("knife") != std::string::npos || w.find("bayonet") != std::string::npos)
+            return 5;
+        for (int c = 0; c < 7; c++)
+            for (const char* n : NAMES[c])
+                if (n && w == n)
+                    return c;
+        return 7;
+    }
+
+    void eco_weights(stats_t& s) {
+        double kills[stats_t::SLOTS] = {}, deaths[stats_t::SLOTS] = {};
+        for (size_t k = 0; k < s.infos.size(); k++)
+            for (const kill_t& kl : s.infos[k].kills) {
+                if (kl.victim < 0)
+                    continue;
+                const player_stats_t& v = s.players[kl.victim];
+                const player_stats_t* a = kl.killer >= 0 && kl.killer != kl.victim ? &s.players[kl.killer] : nullptr;
+                bool duel = a && k < v.lines.size() && k < a->lines.size() && v.lines[k].in && a->lines[k].in && v.lines[k].side != a->lines[k].side &&
+                            k < v.eco.size() && k < a->eco.size();
+                double w = duel ? std::clamp(sqrt((v.eco[k].equipment + ECO_BASE) / (a->eco[k].equipment + ECO_BASE)), ECO_LOW, ECO_HIGH) : 1.0;
+                deaths[kl.victim] += w;
+                if (a && k < v.lines.size() && k < a->lines.size() && v.lines[k].side != a->lines[k].side)
+                    kills[kl.killer] += w;
+            }
+        for (int i = 0; i < stats_t::SLOTS; i++) {
+            s.players[i].eco_kills = (int)lround(kills[i] * 100);
+            s.players[i].eco_deaths = (int)lround(deaths[i] * 100);
+        }
+    }
+
     void end_round(stats_t& s, parser_t& p) {
         if (!s.in_round)
             return;
@@ -98,9 +142,11 @@ namespace stats {
             const round_t& r = s.round[i];
             player_stats_t& ps = s.players[i];
             int kast = (r.kill ? 1 : 0) | (r.assist ? 2 : 0) | (r.alive && !r.died ? 4 : 0) | (r.traded ? 8 : 0);
-            ps.lines.push_back(r.in ? round_line_t{true, r.died, r.kills, r.damage, r.side, kast} : round_line_t{});
+            ps.lines.push_back(r.in ? round_line_t{true, r.died, r.kills, r.damage, r.side, kast, r.alive} : round_line_t{});
             if (!r.in)
                 continue;
+            ps.lines.back().clutch = r.clutch_vs;
+            ps.lines.back().clutch_kills = r.clutch_kills;
             ps.rounds++;
             if (r.kill || r.assist || (r.alive && !r.died) || r.traded)
                 ps.kast++;
@@ -108,6 +154,7 @@ namespace stats {
             if (r.clutch_vs > 0) {
                 ps.clutch_rounds++;
                 ps.clutches += r.side == winner;
+                (r.side == winner ? ps.clutch_won : ps.clutch_lost)[std::min(r.clutch_vs, 5)]++;
             }
         }
         s.in_round = false;
@@ -131,6 +178,7 @@ namespace stats {
             }
         }
         s.deaths.clear();
+        memset(s.dealt, 0, sizeof(s.dealt));
         s.info = round_info_t{};
         s.info.start = p.tick;
         s.first_kill = false;
@@ -174,6 +222,7 @@ namespace stats {
         if (removed > 0) {
             s.players[attacker].damage += removed;
             s.round[attacker].damage += removed;
+            s.dealt[victim][attacker] += removed;
         }
         if (is_gun(game_events::str(e, "weapon")) && s.hits.insert({attacker, p.tick, victim}).second)
             s.pending.push_back({attacker, true, game_events::num(e, "hitgroup", 0) == HEAD});
@@ -205,8 +254,11 @@ namespace stats {
             k.hs_kills += game_events::num(e, "headshot", 0) != 0;
             k.wallbang_kills += game_events::num(e, "penetrated", 0) > 0;
             k.smoke_kills += game_events::num(e, "thrusmoke", 0) != 0;
+            k.weapon_kills[weapon_class(kl.weapon)]++;
             s.round[killer].kill = s.round[killer].kill || open;
             s.round[killer].kills++;
+            if (open && s.round[killer].clutch_vs > 0)
+                s.round[killer].clutch_kills++;
             if (!s.first_kill) {
                 k.entry_kills++;
                 if (own(s, e, victim, "userid_pawn"))
@@ -217,12 +269,16 @@ namespace stats {
             for (const fall_t& d : s.deaths)
                 if (d.killer == victim && p.tick - d.tick <= window && team_of(s, p, d.victim) == team_of(s, p, killer)) {
                     s.round[d.victim].traded = true;
+                    kl.traded = d.victim;
                     trade = true;
                 }
             k.trade_kills += trade;
             if (trade)
                 kl.flags |= kf_trade;
         }
+        for (int i = 0; i < stats_t::SLOTS; i++)
+            if (s.dealt[victim][i] > 0)
+                kl.hurt.push_back({i, s.dealt[victim][i]});
         s.info.kills.push_back(kl);
         s.first_kill = true;
         if (own(s, e, assister, "assister_pawn") && team_of(s, p, assister) != side) {
@@ -363,5 +419,14 @@ namespace stats {
                 s.players[i].eco.push_back({(int)access::get_int(*c, *eq, (int)k), (int)access::get_int(*c, *sv, (int)k), (int)access::get_int(*c, *er, (int)k),
                                             (int)access::get_int(*c, *lv, (int)k), (int)access::get_int(*c, *kl, (int)k)});
         }
+        eco_weights(s);
+        swing_view_t v;
+        for (int i = 0; i < stats_t::SLOTS; i++)
+            v.players[i] = &s.players[i];
+        v.winners = &s.winners;
+        v.infos = &s.infos;
+        v.interval = p.tick_interval;
+        v.map = p.demo.info.map;
+        swing::compute(v);
     }
 }

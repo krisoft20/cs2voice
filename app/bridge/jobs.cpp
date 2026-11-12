@@ -2,8 +2,10 @@
 
 #include <tlhelp32.h>
 
+#include "bridge/gsi.h"
 #include "bridge/history.h"
 #include "bridge/jobs.h"
+#include "bridge/matches.h"
 #include "bridge/perfs.h"
 #include "bridge/profiles.h"
 #include "dbg.h"
@@ -23,7 +25,7 @@ namespace jobs {
     };
 
     const char* CACHE_FORMAT = "cache 5";
-    const int DATA_VERSION = 19;
+    const int DATA_VERSION = 22;
 
     const int MAX_WORKERS = 8;
     const uint64_t GAME_CHECK_MS = 5000;
@@ -89,15 +91,22 @@ namespace jobs {
                  ",\"k3\":" + std::to_string(st.multi[3]) + ",\"k4\":" + std::to_string(st.multi[4]) + ",\"k5\":" + std::to_string(st.multi[5]) +
                  ",\"utility_damage\":" + std::to_string(st.utility_damage) + ",\"enemies_flashed\":" + std::to_string(st.enemies_flashed) +
                  ",\"flash_assists\":" + std::to_string(st.flash_assists) +
+                 ",\"eco_kills\":" + std::to_string(st.eco_kills) + ",\"eco_deaths\":" + std::to_string(st.eco_deaths) +
                  ",\"ping\":" + std::to_string(st.ping_n ? (st.ping_sum + st.ping_n / 2) / st.ping_n : 0) +
                  ",\"flashes\":" + std::to_string(st.flashes) + ",\"enemy_blinds\":" + std::to_string(st.enemy_blinds) +
                  ",\"enemy_blind_ms\":" + std::to_string((long long)(st.enemy_blind * 1000 + 0.5)) + ",\"team_blind_ms\":" + std::to_string((long long)(st.team_blind * 1000 + 0.5)) + ",\"lines\":[";
             for (size_t k = 0; k < st.lines.size(); k++) {
                 const round_line_t& l = st.lines[k];
                 j += std::string(k ? "," : "") + "[" + (l.in ? "1" : "0") + "," + std::to_string(l.kills) + "," + (l.died ? "1" : "0") + "," +
-                     std::to_string(l.damage) + "," + std::to_string(l.side) + "," + std::to_string(l.kast) + "]";
+                     std::to_string(l.damage) + "," + std::to_string(l.side) + "," + std::to_string(l.kast) + "," + std::to_string(l.swing) + "," + std::to_string(l.clutch) + "," + std::to_string(l.clutch_kills) + "]";
             }
-            j += "],\"eco\":[";
+            j += "]";
+            for (int n = 1; n <= 5; n++)
+                j += ",\"c" + std::to_string(n) + "w\":" + std::to_string(st.clutch_won[n]) + ",\"c" + std::to_string(n) + "l\":" + std::to_string(st.clutch_lost[n]);
+            static const char* WEAPONS[8] = {"rifle", "sniper", "smg", "pistol", "heavy", "knife", "zeus", "other"};
+            for (int n = 0; n < 8; n++)
+                j += std::string(",\"wk_") + WEAPONS[n] + "\":" + std::to_string(st.weapon_kills[n]);
+            j += ",\"eco\":[";
             for (size_t k = 0; k < st.eco.size(); k++) {
                 const round_eco_t& e = st.eco[k];
                 j += std::string(k ? "," : "") + "[" + std::to_string(e.equipment) + "," + std::to_string(e.saved) + "," + std::to_string(e.earned) + "," +
@@ -134,7 +143,7 @@ namespace jobs {
             for (size_t n = 0; n < ri.kills.size(); n++) {
                 const kill_t& kl = ri.kills[n];
                 j += std::string(n ? "," : "") + "[" + std::to_string(kl.tick) + "," + std::to_string(kl.killer) + "," + std::to_string(kl.victim) + "," +
-                     std::to_string(kl.assister) + "," + std::to_string(kl.flags) + ",\"" + json::escape(kl.weapon) + "\"]";
+                     std::to_string(kl.assister) + "," + std::to_string(kl.flags) + ",\"" + json::escape(kl.weapon) + "\"," + std::to_string(kl.swing) + "]";
             }
             j += "],\"bomb\":[";
             for (size_t n = 0; n < ri.bomb.size(); n++)
@@ -267,7 +276,7 @@ namespace jobs {
         bool busy = g_hold > 0;
         for (int i = 0; i < g_count; i++)
             busy = busy || g_workers[i].urgent;
-        if (!urgent && busy)
+        if (!urgent && (busy || gsi::playing()))
             return false;
         quick = !urgent && !g_quick.empty();
         if (quick) {
@@ -372,6 +381,7 @@ namespace jobs {
             finish(me);
             window::post_json(j);
             history::note(j, f.mtime);
+            matches::note(j, f.mtime);
             if (!urgent) {
                 std::vector<std::string> ids;
                 for (const roster_player_t& p : r.players)
@@ -392,6 +402,19 @@ namespace jobs {
             SetThreadPriority(g_workers[i].thread.native_handle(), THREAD_PRIORITY_BELOW_NORMAL);
         }
         return true;
+    }
+
+    void seed_matches() {
+        std::vector<std::pair<std::string, int64_t>> full;
+        {
+            std::lock_guard<std::mutex> lock(g_mu);
+            for (const auto& [path, e] : g_cache)
+                if (is_full(e))
+                    full.push_back({e.json, e.mtime});
+        }
+        for (const auto& [j, mtime] : full)
+            matches::note(j, mtime, true);
+        dbg::print("[jobs] matches seeded from %zu cached demos", full.size());
     }
 
     void seed_history() {

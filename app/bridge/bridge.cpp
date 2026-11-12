@@ -8,11 +8,13 @@
 #include "bridge/bridge.h"
 #include "bridge/clips.h"
 #include "bridge/faceit.h"
+#include "bridge/gsi.h"
 #include "bridge/history.h"
 #include "bridge/inventory.h"
 #include "bridge/jobs.h"
 #include "bridge/launch.h"
 #include "bridge/maps.h"
+#include "bridge/matches.h"
 #include "bridge/perfs.h"
 #include "bridge/profiles.h"
 #include "bridge/replays.h"
@@ -596,8 +598,11 @@ namespace bridge {
     }
 
     void open_url(const std::string& url) {
-        const char* ALLOWED = "https://github.com/krisoft20/cs2voice";
-        if (url.rfind(ALLOWED, 0) != 0)
+        const char* ALLOWED[] = {"https://github.com/krisoft20/cs2voice", "https://discord.gg/"};
+        bool ok = false;
+        for (const char* a : ALLOWED)
+            ok |= url.rfind(a, 0) == 0;
+        if (!ok)
             return;
         ShellExecuteW(window::handle(), L"open", text::wide(url).c_str(), nullptr, nullptr, SW_SHOWNORMAL);
     }
@@ -640,6 +645,8 @@ namespace bridge {
             return false;
         if (!known)
             jobs::seed_history();
+        if (!matches::init(data_dir + L"\\matches.txt"))
+            jobs::seed_matches();
         maps::init(data_dir + L"\\maps");
         inventory::init(data_dir + L"\\maps\\econ");
         voices::init();
@@ -647,6 +654,7 @@ namespace bridge {
         perfs::init(data_dir + L"\\perfs.txt");
         launch::init(data_dir + L"\\play");
         replays::init(data_dir + L"\\replays");
+        gsi::init();
         clips::init(data_dir);
         return watch::init(all_folders());
     }
@@ -659,6 +667,7 @@ namespace bridge {
         tracks::cleanup();
         perfs::cleanup();
         launch::cleanup();
+        gsi::cleanup();
         replays::cleanup();
         exporter::cleanup();
         clips::cleanup();
@@ -673,6 +682,7 @@ namespace bridge {
             update::check();
         web::post("{\"type\":\"me\",\"steamid\":\"" + std::to_string(finder::current_user()) + "\"}");
         web::post(history::json());
+        web::post(matches::json());
         send_folders();
         rescan();
         for (const std::string& src : launch::fixed_sources())
@@ -702,6 +712,11 @@ namespace bridge {
     void cmd_faceit(const json_t& j) {
         if (const demo_file_t* f = file_of(json::str(json::at(j, "path"))); f && g_steam)
             faceit::want(f->path, f->name);
+    }
+
+    void cmd_faceit_history(const json_t& j) {
+        if (g_steam)
+            faceit::history(json::str(json::at(j, "steamid")));
     }
 
     void cmd_profiles(const json_t& j) {
@@ -1171,6 +1186,7 @@ namespace bridge {
         {"add_folder", cmd_add_folder},
         {"remove_folder", cmd_remove_folder},
         {"faceit", cmd_faceit},
+        {"faceit_history", cmd_faceit_history},
         {"profiles", cmd_profiles},
         {"set", cmd_set},
         {"cleanup_folder", cmd_cleanup_folder},

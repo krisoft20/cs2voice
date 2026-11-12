@@ -10,6 +10,10 @@ struct round_line_t {
     int damage = 0;
     int side = 0;
     int kast = 0;
+    bool alive = false;
+    int swing = 0;
+    int clutch = 0;
+    int clutch_kills = 0;
 };
 
 struct round_eco_t {
@@ -38,6 +42,9 @@ struct kill_t {
     int assister = -1;
     int flags = 0;
     std::string weapon;
+    int traded = -1;
+    int swing = 0;
+    std::vector<std::pair<int, int>> hurt;
 };
 
 struct bomb_t {
@@ -73,6 +80,11 @@ struct player_stats_t {
     int clutch_rounds = 0;
     int clutches = 0;
     int multi[6] = {};
+    int clutch_won[6] = {};
+    int clutch_lost[6] = {};
+    int weapon_kills[8] = {};
+    int eco_kills = 0;
+    int eco_deaths = 0;
     int utility_damage = 0;
     int enemies_flashed = 0;
     int flash_assists = 0;
@@ -97,6 +109,7 @@ struct round_t {
     int kills = 0;
     int damage = 0;
     int clutch_vs = 0;
+    int clutch_kills = 0;
 };
 
 struct aim_t {
@@ -144,6 +157,7 @@ struct stats_t {
     player_stats_t players[SLOTS];
     round_t round[SLOTS];
     std::vector<fall_t> deaths;
+    int dealt[SLOTS][SLOTS] = {};
     std::map<int, int> hp;
     std::map<int, int> owner;
     std::set<std::tuple<int, int, int>> hits;

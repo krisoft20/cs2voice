@@ -1,9 +1,9 @@
 import { Fragment, useCallback, useEffect, useId, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import type { ReactNode } from 'react'
-import { listen, send, type Clip, type ClipFile, type PlayerState, type ReplayMatch, type CleanupCfg, type SetupInfo, type Demo, type FaceitPlayer, type Folder, type HistoryMatch, type Player, type Profile, type Roster, type Stats, type Storage, type PerfMsg, type PerfRow, type SkinsMsg, type SkinItem } from './bridge'
+import { listen, send, type Clip, type ClipFile, type PlayerState, type ReplayMatch, type CleanupCfg, type SetupInfo, type Demo, type EloHistory, type FaceitPlayer, type Folder, type HistoryMatch, type TrackMatch, type Player, type Profile, type Roster, type Stats, type Storage, type PerfMsg, type PerfRow, type SkinsMsg, type SkinItem } from './bridge'
 import { LANGS, gameLang, resolve, translator, type Key, type Lang, type LangChoice } from './i18n'
-import { BoltIcon, BombIcon, CalendarIcon, CheckIcon, ChevronDownIcon, ChevronLeftIcon, ChevronRightIcon, ClipIcon, ClockIcon, CloseIcon, CloudIcon, CrownIcon, DemoFileIcon, DiskIcon, DoorIcon, FlameIcon, FolderIcon, FolderPlusIcon, HelpIcon, InfoIcon, LanguageIcon, LockIcon, LogoMark, MicIcon, MicOffIcon, MinusIcon, PlayIcon, PlusIcon, RefreshIcon, SearchIcon, SettingsIcon, ShieldIcon, Speaker, SteamIcon, SunIcon, TargetIcon, TradeIcon, UserMinusIcon, UsersIcon, VideoIcon, WallIcon } from './icons'
-import { Avatar, UiContext, useUi, type Loader } from './common'
+import { BoltIcon, BombIcon, CalendarIcon, CheckIcon, ChevronDownIcon, ChevronLeftIcon, ChevronRightIcon, ClipIcon, ClockIcon, CloseIcon, CloudIcon, CrownIcon, DemoFileIcon, DiskIcon, DoorIcon, FlameIcon, FolderIcon, FolderPlusIcon, HelpIcon, InfoIcon, LanguageIcon, LockIcon, LogoMark, MicIcon, MicOffIcon, MinusIcon, PlayIcon, PlusIcon, RefreshIcon, SearchIcon, SettingsIcon, ShieldIcon, Speaker, SteamIcon, SunIcon, TargetIcon, DiscordIcon, TrackIcon, TradeIcon, UserMinusIcon, UsersIcon, VideoIcon, WallIcon } from './icons'
+import { Avatar, UiContext, useUi, type Loader, RatingChip } from './common'
 import { decode, draw } from './crosshair'
 import { Check, CleanupCard, CleanupReview, CleanupSettings } from './Cleanup'
 import { planCleanup, signature } from './cleanplan'
@@ -13,6 +13,7 @@ import { ReplayList, ReplayFirst, ReplayNotice, ReplayView, replayScore, type Re
 import { ClipsPage } from './Clips'
 import { Details } from './Details'
 import { MEASURES, bins, median, rating, type Measure } from './stats'
+import { TrackPage } from './Track'
 import { DRILLS, Moments, momentsOf, type Drill } from './Moments'
 import { REFERENCE } from './reference'
 import { Radar, type RadarInfo } from './Radar'
@@ -23,7 +24,7 @@ import { Voices } from './Voices'
 import { command, length, mapName, masks, sideName, source, teamLabels, when, rounds } from './voice'
 
 
-type Page = 'demos' | 'settings' | 'replays' | 'clips'
+type Page = 'demos' | 'settings' | 'replays' | 'clips' | 'track'
 type Place = { page: Page; selected: string | null }
 
 const SPIN_MS = 800
@@ -40,6 +41,7 @@ export default function App() {
   const [profiles, setProfiles] = useState<Record<string, Profile>>({})
   const [me, setMe] = useState('')
   const [history, setHistory] = useState<Record<string, HistoryMatch>>({})
+  const [tracked, setTracked] = useState<Record<string, TrackMatch>>({})
   const [art, setArt] = useState<Record<string, boolean>>({})
   const [choice, setChoice] = useState<LangChoice>('system')
   const [version, setVersion] = useState('')
@@ -71,6 +73,7 @@ export default function App() {
   const [skins, setSkins] = useState<Record<string, SkinsMsg>>({})
   const [econ, setEcon] = useState<Set<string>>(new Set())
   const [icons, setIcons] = useState(false)
+  const unread = useMemo(() => (demos ?? []).filter(d => { const r = rosters[d.path]; return !r || (r.ok && (r.partial || !!r.stale)) }).length, [demos, rosters])
   const [saved, setSaved] = useState('')
   const [watch, setWatch] = useState<{ state: string; err?: string } | null>(null)
   const [fixes, setFixes] = useState<Record<string, Fix>>({})
@@ -85,7 +88,7 @@ export default function App() {
   const [help, setHelp] = useState(false)
   const spinStart = useRef(0)
   const artAsked = useRef(new Set<string>())
-  const [page, setPage] = useState<Page>(location.hash === '#settings' ? 'settings' : location.hash === '#replays' ? 'replays' : location.hash === '#clips' ? 'clips' : 'demos')
+  const [page, setPage] = useState<Page>(location.hash === '#settings' ? 'settings' : location.hash === '#replays' ? 'replays' : location.hash === '#clips' ? 'clips' : location.hash === '#track' ? 'track' : 'demos')
   const [replays, setReplays] = useState<ReplaysData | null>(null)
   const [fullscreen, setFullscreen] = useState(false)
   const [playerState, setPlayerState] = useState<PlayerState | null>(null)
@@ -237,6 +240,8 @@ export default function App() {
       else if (m.type === 'me') setMe(m.steamid)
       else if (m.type === 'history') setHistory(Object.fromEntries(m.matches.map(x => [x.key, x])))
       else if (m.type === 'history_add') setHistory(h => ({ ...h, [m.match.key]: m.match }))
+      else if (m.type === 'matches') setTracked(Object.fromEntries(m.matches.map(x => [x.key, x])))
+      else if (m.type === 'matches_add') setTracked(h => ({ ...h, [m.match.key]: m.match }))
       else if (m.type === 'art') setArt(a => ({ ...a, [m.map]: true }))
       else if (m.type === 'voice') setVoice({ path: m.path, data: m.data, err: m.err })
       else if (m.type === 'track') setTrack({ path: m.path, data: m.data, err: m.err })
@@ -289,6 +294,7 @@ export default function App() {
         if (m.state === 'copied') setTimeout(() => setWatch(w => (w?.state === m.state ? null : w)), 2500)
       }
       else if (m.type === 'faceit') setFaceit(f => ({ ...f, [m.path]: m.players }))
+      else if (m.type === 'faceit_history') setEloHistory({ elo: m.elo, items: m.items })
       else if (m.type === 'fixed') {
         setFixes(f => ({ ...f, [m.path]: m.ok ? { state: 'done' } : { state: 'error', err: m.err } }))
       }
@@ -352,6 +358,8 @@ export default function App() {
   const rawRoster = selected ? rosters[selected] : undefined
   const roster = useMemo(() => withFaceit(rawRoster, selected ? faceit[selected] : undefined), [rawRoster, selected, faceit])
   const met = useMemo(() => meetings(history, rawRoster, me), [history, rawRoster, me])
+  const trackList = useMemo(() => Object.values(tracked), [tracked])
+  const knownPaths = useMemo(() => new Set((demos ?? []).map(d => d.path)), [demos])
   const byKey = useMemo(() => {
     const out: Record<string, string> = {}
     for (const d of demos ?? []) {
@@ -363,6 +371,20 @@ export default function App() {
   useEffect(() => {
     if (selected && rawRoster?.ok && !faceit[selected]) send({ type: 'faceit', path: selected })
   }, [selected, !!rawRoster?.ok])
+  const eloAsked = useRef(new Set<string>())
+  const [eloHistory, setEloHistory] = useState<EloHistory | null>(null)
+  useEffect(() => {
+    if (page !== 'track') return
+    const todo = trackList.map(m => m.path).filter(p => knownPaths.has(p) && !faceit[p] && !eloAsked.current.has(p) && /(^|[\\/])1-[0-9a-f]{8}-/i.test(p))
+    if (!todo.length) return
+    let at = 0
+    const timer = setInterval(() => {
+      if (at >= todo.length) return clearInterval(timer)
+      eloAsked.current.add(todo[at])
+      send({ type: 'faceit', path: todo[at++] })
+    }, 250)
+    return () => clearInterval(timer)
+  }, [page, trackList, knownPaths])
   const pool = useMemo(() => {
     const out: Stats[] = []
     for (const r of Object.values(rosters))
@@ -399,7 +421,7 @@ export default function App() {
         onHelp={() => setHelp(true)}
         update={update?.version ?? ''}
         onUpdate={() => setShowUpdate(true)}
-        title={page === 'settings' ? ui.t('settings') : page === 'clips' ? ui.t('clips') : page === 'replays' ? ((replays && replays.keep >= 0 && replayTitle) || ui.t('replays')) : roster ? `${mapName(roster.map, ui.t)}${(!roster.partial || roster.ended) && roster.rounds > 0 ? `  ${roster.teams[0].score} : ${roster.teams[1].score}` : ''}` : ''}
+        title={page === 'settings' ? ui.t('settings') : page === 'clips' ? ui.t('clips') : page === 'track' ? ui.t('track') : page === 'replays' ? ((replays && replays.keep >= 0 && replayTitle) || ui.t('replays')) : roster ? `${mapName(roster.map, ui.t)}${(!roster.partial || roster.ended) && roster.rounds > 0 ? `  ${roster.teams[0].score} : ${roster.teams[1].score}` : ''}` : ''}
         maximized={maximized}
       />
       <div className={`app page-${page}`}>
@@ -500,6 +522,22 @@ export default function App() {
               )}
             </main>
           </>
+        ) : page === 'track' ? (
+          <TrackPage
+            matches={trackList}
+            art={art}
+            avatars={avatars}
+            known={knownPaths}
+            icons={icons}
+            faceit={faceit}
+            history={eloHistory}
+            left={unread}
+            all={demos?.length ?? 0}
+            onOpen={path => {
+              setSelected(path)
+              setPage('demos')
+            }}
+          />
         ) : page === 'clips' ? (
           <ClipsPage
             files={clipFiles}
@@ -660,6 +698,7 @@ export default function App() {
 }
 
 const REPO = 'https://github.com/krisoft20/cs2voice'
+const DISCORD = 'https://discord.gg/4vsvva5GHM'
 
 const CREDITS = [
   ['Microsoft Edge WebView2', 'BSD-3-Clause'],
@@ -907,9 +946,17 @@ function Rail(props: { page: Page; onPage: (p: Page) => void }) {
         <VideoIcon />
         <small>{t('replays')}</small>
       </button>
+      <button className={`rail-btn${page === 'track' ? ' on' : ''}`} onClick={() => onPage('track')} aria-label={t('track')}>
+        <TrackIcon />
+        <small>{t('track')}</small>
+      </button>
       <button className={`rail-btn${page === 'clips' ? ' on' : ''}`} onClick={() => onPage('clips')} aria-label={t('clips')}>
         <ClipIcon />
         <small>{t('clips')}</small>
+      </button>
+      <button className="rail-btn bottom" onClick={() => DISCORD && send({ type: 'open_url', url: DISCORD })} aria-label="Discord">
+        <DiscordIcon />
+        <small>Discord</small>
       </button>
       <button
         className={`rail-btn bottom${page === 'settings' ? ' on' : ''}`}
@@ -1201,7 +1248,7 @@ function DemoView(props: {
                             {p.stats.kills}/{p.stats.deaths}/{p.stats.assists}
                           </span>
                         )}
-                        <span className="pl-rt" style={ratingTone(r)}>{fmt(r, 2, lang)}</span>
+                        <RatingChip value={r} />
                       </button>
                     )
                   })}
@@ -1413,7 +1460,7 @@ function DemoView(props: {
                               <i>/</i>
                               {p.stats.assists}
                             </span>
-                            <span className="rt" style={ratingTone(rating(p.stats))}>{fmt(rating(p.stats), 2, lang)}</span>
+                            <RatingChip value={rating(p.stats)} />
                           </span>
                         )}
                       </li>
@@ -1870,8 +1917,9 @@ const red = (k: number) => ({ color: `hsl(6 ${45 + 45 * k}% ${74 - 16 * k}%)` })
 const ratingTone = (r: number | null) => {
   if (r === null) return undefined
   const v = Math.round(r * 100) / 100
-  if (v > 1) return green(Math.min(1, (v - 1) / 0.6))
-  if (v < 0.6) return red(Math.min(1, (0.6 - v) / 0.4))
+  if (v >= 1.3) return { color: 'var(--gold)', textShadow: 'var(--gold-glow)' }
+  if (v >= 1.05) return green(Math.min(1, (v - 1) / 0.3))
+  if (v < 0.85) return red(Math.min(1, (0.85 - v) / 0.3))
   return undefined
 }
 
@@ -2724,7 +2772,7 @@ function Tile(props: { measure: Measure; stats: Stats; pool: Stats[]; open?: boo
         {label}
         {onOpen && <ChevronDownIcon />}
       </div>
-      <div className="tile-value" style={measure.key === 'rating' ? ratingTone(value) : normTone(measure.key, measure.unit, value)}>
+      <div className="tile-value" style={measure.key === 'rating' || measure.key === 'impact' ? ratingTone(value) : measure.key === 'roundSwing' ? ratingTone(value === null ? null : 1 + 0.06 * value) : normTone(measure.key, measure.unit, value)}>
         {fmt(value, measure.digits, lang)}
         {value !== null && measure.unit && <small>{measure.unit}</small>}
       </div>
