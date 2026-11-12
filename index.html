@@ -27,10 +27,14 @@
   "alternateName": "CS2 Voice",
   "operatingSystem": "Windows 10, Windows 11",
   "applicationCategory": "GameApplication",
-  "description": "Plays every player's voice chat from Counter-Strike 2 demos, with stats, a 2D radar replay, Steam recordings and clips.",
+  "description": "Free Windows app that plays every player's voice chat from Counter-Strike 2 demos on your PC, with stats, a 2D radar replay, Steam recordings and clips.",
+  "disambiguatingDescription": "A desktop app by krisoft20, distributed only on GitHub and the Microsoft Store. Not affiliated with cs2voice.com, which is a separate paid web service.",
   "url": "https://krisoft20.github.io/cs2voice/",
   "downloadUrl": "https://github.com/krisoft20/cs2voice/releases/latest",
   "screenshot": "https://krisoft20.github.io/cs2voice/img/og.png",
+  "sameAs": ["https://github.com/krisoft20/cs2voice", "https://apps.microsoft.com/detail/9pdv2hrck9ws"],
+  "author": { "@type": "Person", "name": "krisoft20", "url": "https://github.com/krisoft20" },
+  "isAccessibleForFree": true,
   "offers": { "@type": "Offer", "price": "0", "priceCurrency": "USD" }
 }
 </script>
@@ -258,7 +262,7 @@ footer { max-width: 1120px; margin: 0 auto; padding: 18px 16px 40px; color: var(
       <p class="cmd">status</p>
       <p class="out"><span class="tag">[Match]</span> Both teams, FACEIT levels, awards. Watch in game copies the console command.</p>
       <figure>
-        <img src="img/overview.webp" width="1424" height="892" alt="Overview tab: Anubis 13:10, both teams with K/D/A and rating, match awards below" loading="lazy">
+        <img src="img/overview.webp" width="1424" height="892" alt="Overview tab: Ancient 16:14, both teams with K/D/A and rating, match awards below" loading="lazy">
       </figure>
     </section>
 
@@ -266,7 +270,7 @@ footer { max-width: 1120px; margin: 0 auto; padding: 18px 16px 40px; color: var(
       <p class="cmd">tv_listen_voice_indices 6; playdemo "anubis.dem"</p>
       <p class="out"><span class="tag">[Voice]</span> Every player's voice, round by round, next to the kills.</p>
       <figure>
-        <img src="img/voices.webp" width="1424" height="892" alt="Voices tab: round 16 on Anubis, one lane per player with speech and kills" loading="lazy">
+        <img src="img/voices.webp" width="1424" height="892" alt="Voices tab: round 1 on Ancient, one lane per player with speech and kills" loading="lazy">
       </figure>
     </section>
 
@@ -282,11 +286,19 @@ footer { max-width: 1120px; margin: 0 auto; padding: 18px 16px 40px; color: var(
       <p class="cmd">replays</p>
       <p class="out"><span class="tag">[Replays]</span> Steam's recording of your match, lined up with the demo.</p>
       <figure>
-        <img src="img/replays.webp" width="1424" height="892" alt="Replays page: Steam recording of an Anubis match with kills listed per round" loading="lazy">
+        <img src="img/replays.webp" width="1424" height="892" alt="Replays page: Steam recording of a Mirage match with kills listed per round" loading="lazy">
       </figure>
       <p class="out after"><span class="tag">[Clips]</span> Cut a moment into an MP4 for Discord.</p>
       <figure>
         <img src="img/clip.webp" width="1424" height="892" alt="Clip editor: a 15 second range picked on the replay timeline, sized for Discord" loading="lazy">
+      </figure>
+    </section>
+
+    <section class="entry" id="track">
+      <p class="cmd">track</p>
+      <p class="out"><span class="tag">[Track]</span> Your rating, T and CT side, maps and FACEIT ELO across all your demos.</p>
+      <figure>
+        <img src="img/track.webp" width="1424" height="892" alt="Track page: rating, win rate, K/D, ADR and FACEIT ELO tiles, the last ten matches and an ELO chart" loading="lazy">
       </figure>
     </section>
 
@@ -313,6 +325,8 @@ footer { max-width: 1120px; margin: 0 auto; padding: 18px 16px 40px; color: var(
         </a>
       </div>
       <p class="out"><span class="tag">[cs2voice]</span> Only from here, the <a href="https://apps.microsoft.com/detail/9pdv2hrck9ws">Microsoft Store</a> and <a href="https://github.com/krisoft20/cs2voice">GitHub</a>. Not affiliated with Valve.</p>
+      <p class="out"><span class="tag">[cs2voice]</span> Questions and bugs go to <a href="https://discord.gg/4vsvva5GHM">Discord</a>.</p>
+      <p class="out"><span class="tag">[cs2voice]</span> cs2voice.com is a different, paid web service and has nothing to do with this app.</p>
     </section>
   </main>
 
@@ -337,6 +351,8 @@ const cmds = [
   ['radar', '2d replay and grenades', 'radar'],
   ['replays', 'steam recordings', 'replays'],
   ['clips', 'mp4 for discord', 'replays'],
+  ['track', 'your stats across demos', 'track'],
+  ['discord', 'questions and bugs', 'get'],
   ['stats', 'players, rounds, crosshairs, skins', 'more'],
   ['download', 'microsoft store or exe', 'get'],
 ]
