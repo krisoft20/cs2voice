@@ -25,7 +25,7 @@ namespace jobs {
     };
 
     const char* CACHE_FORMAT = "cache 5";
-    const int DATA_VERSION = 22;
+    const int DATA_VERSION = 23;
 
     const int MAX_WORKERS = 8;
     const uint64_t GAME_CHECK_MS = 5000;
@@ -58,7 +58,8 @@ namespace jobs {
     std::string roster_json(const demo_file_t& f, const roster_t& r, bool ok) {
         std::string j = "{\"type\":\"roster\",\"path\":\"" + json::escape(f.path) + "\",\"ok\":" + (ok ? "true" : "false") +
                         ",\"partial\":" + (r.partial ? "true" : "false") + ",\"ended\":" + (r.ended ? "true" : "false") +
-                        ",\"voice_known\":" + (r.voice_known ? "true" : "false") + ",\"pet_crash\":" + (r.pet_crash ? "true" : "false");
+                        ",\"voice_known\":" + (r.voice_known ? "true" : "false") + ",\"pet_crash\":" + (r.pet_crash ? "true" : "false") +
+                        ",\"unread\":" + (r.unread ? "true" : "false");
         j += ",\"err\":\"" + json::escape(r.err) + "\"";
         j += ",\"map\":\"" + json::escape(r.map) + "\",\"server\":\"" + json::escape(r.server) + "\"";
         j += ",\"voice\":" + std::to_string(r.voice) + ",\"duration\":" + std::to_string(r.duration) +

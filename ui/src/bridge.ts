@@ -103,6 +103,7 @@ export type Roster = {
   ended?: boolean
   voice_known?: boolean
   pet_crash?: boolean
+  unread?: boolean
   err: string
   map: string
   server: string

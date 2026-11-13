@@ -84,6 +84,9 @@ void value(bits_t& b, const decoder_t& d, value_t& v, entity_t& e) {
     case dk_bits8:
         put_u64(v, bits::read(b, 8));
         break;
+    case dk_sbits8:
+        put_u64(v, (uint64_t)(int64_t)(int8_t)bits::read(b, 8));
+        break;
     case dk_float:
         put_f(v, 0, read_float(b, d));
         v.w[1] = v.w[2] = 0;

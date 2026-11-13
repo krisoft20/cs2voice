@@ -180,6 +180,7 @@ export const es: Dict = {
   notEnoughData: 'datos insuficientes ({n})',
   rifleShots: 'de {n} disparos con rifle',
   utilityRating: 'Rating de utilidad',
+  demoUnread: 'No se pudo leer parte de esta demo, probablemente por una actualización de CS2. Faltan algunas estadísticas. Una actualización de cs2voice debería arreglarlo.',
   petCrash: 'CS2 se cierra al cargar esta demo porque el servidor envió tarde los datos de una gallina.',
   petFix: 'Crear una copia corregida',
   off: 'No',

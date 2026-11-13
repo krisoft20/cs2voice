@@ -21,7 +21,7 @@
 
 namespace perfs {
     const char* CACHE_FORMAT = "perfs 1";
-    const int DATA_VERSION = 8;
+    const int DATA_VERSION = 9;
 
     struct entry_t {
         int version = 0;

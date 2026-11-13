@@ -1795,6 +1795,7 @@ button:focus-visible {
 .tile {
   display: grid;
   grid-template-columns: auto minmax(0, 1fr);
+  grid-template-rows: auto 1fr;
   align-items: end;
   gap: 8px 14px;
   padding: 12px 14px 14px;
@@ -1816,9 +1817,10 @@ button:focus-visible {
 }
 
 .tile-note {
-  grid-column: 1 / -1;
   color: var(--faint);
   font-size: 12px;
+  line-height: 1.3;
+  text-align: right;
 }
 
 .tile-value .tab-load {

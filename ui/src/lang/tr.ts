@@ -180,6 +180,7 @@ export const tr: Dict = {
   notEnoughData: 'yetersiz veri ({n})',
   rifleShots: '{n} tüfek atışı üzerinden',
   utilityRating: 'Utility puanı',
+  demoUnread: 'Bu demonun bir kısmı okunamadı, büyük olasılıkla bir CS2 güncellemesi yüzünden. Bazı istatistikler eksik. Bir cs2voice güncellemesi bunu düzeltmeli.',
   petCrash: 'Sunucu bir tavuğun verisini çok geç gönderdiği için CS2 bu demoyu yüklerken çöküyor.',
   petFix: 'Düzeltilmiş kopya oluştur',
   off: 'Kapalı',

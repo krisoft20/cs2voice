@@ -30,6 +30,7 @@ struct roster_t {
     bool ended = false;
     bool voice_known = false;
     bool pet_crash = false;
+    bool unread = false;
     std::string map;
     std::string server;
     int rounds = 0;

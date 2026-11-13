@@ -263,6 +263,8 @@ static decoder_t pick(const field_def_t& f, const std::string& type) {
         d.kind = dk_u32;
         d.vtype = vt_u64;
     }
+    if (f.encoder == "fixed8" && (d.kind == dk_u32 || d.kind == dk_s32 || d.kind == dk_u64))
+        d.kind = d.kind == dk_s32 ? dk_sbits8 : dk_bits8;
     return d;
 }
 

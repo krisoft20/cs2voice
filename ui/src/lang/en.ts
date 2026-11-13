@@ -178,6 +178,7 @@ export const en = {
   notEnoughData: 'not enough data ({n})',
   rifleShots: 'from {n} rifle shots',
   utilityRating: 'Utility rating',
+  demoUnread: 'Part of this demo could not be read, probably because of a CS2 update. Some stats are missing. A cs2voice update should fix it.',
   petCrash: 'CS2 crashes when loading this demo because the server sent the data for a chicken too late.',
   petFix: 'Make a fixed copy',
   off: 'Off',

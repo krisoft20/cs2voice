@@ -180,6 +180,7 @@ export const zh: Dict = {
   notEnoughData: '数据不足（{n}）',
   rifleShots: '基于 {n} 次步枪射击',
   utilityRating: '道具评分',
+  demoUnread: '这个录像有一部分无法读取，很可能是因为 CS2 更新。部分数据缺失，更新 cs2voice 后应可恢复。',
   petCrash: '加载此 Demo 时 CS2 会崩溃，因为服务器发送鸡的数据太晚了。',
   petFix: '生成修复后的副本',
   off: '关闭',

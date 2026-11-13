@@ -32,6 +32,7 @@ enum dkind_t : uint8_t {
     dk_blob,
     dk_presence,
     dk_count,
+    dk_sbits8,
 };
 
 enum fkind_t : uint8_t {

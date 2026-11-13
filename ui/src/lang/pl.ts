@@ -180,6 +180,7 @@ export const pl: Dict = {
   notEnoughData: 'za mało danych ({n})',
   rifleShots: 'z {n} strzałów z karabinu',
   utilityRating: 'Ocena granatów',
+  demoUnread: 'Części tego dema nie udało się odczytać, prawdopodobnie przez aktualizację CS2. Brakuje niektórych statystyk. Powinna to naprawić aktualizacja cs2voice.',
   petCrash: 'CS2 wywala się przy wczytaniu tego dema, bo serwer wysłał dane kurczaka za późno.',
   petFix: 'Zrób naprawioną kopię',
   off: 'Wyłączone',

@@ -1218,6 +1218,8 @@ function DemoView(props: {
         <div className="notice bad">{t('unreadable', { err: roster.err || t('unknownFormat') })}</div>
       )}
 
+      {roster?.unread && <div className="notice">{t('demoUnread')}</div>}
+
       {roster?.pet_crash && fix?.state !== 'done' && (
         <div className="notice pet">
           <span>{fix?.state === 'error' ? t('petFixFailed', { err: fix.err ?? '' }) : t('petCrash')}</span>

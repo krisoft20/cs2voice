@@ -12,6 +12,7 @@ namespace reader {
     const int SLOTS = 64;
     const int SAMPLE_TICKS = 32;
     const int STABLE_TICKS = 640;
+    const size_t UNREAD_PACKETS = 100;
 
     struct slot_t {
         uint64_t steamid = 0;
@@ -332,6 +333,7 @@ namespace reader {
             build(*p, *s, out);
             out.voice_known = !quick;
             out.pet_crash = basefix::crashes(s->late);
+            out.unread = p->ents.stats.failed > UNREAD_PACKETS;
         }
         if (!ok) {
             out.err = p->err;
